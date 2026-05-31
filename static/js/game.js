@@ -80,15 +80,15 @@ const LABEL_PICKUP_A = "[PICKUP A]";
 const LABEL_PICKUP_B = "[PICKUP B]";
 const LABEL_DROP_OFF = "[DROP-OFF]";
 
-/** Route polyline styling (see style.css for glow) */
-const ROUTE_USER_COLOR    = "#ec4899";
-const ROUTE_USER_WEIGHT   = 5;
-const ROUTE_USER_OPACITY  = 0.8;
-const ROUTE_USER_CLASS    = "route-user";
-const ROUTE_OPTIMAL_COLOR   = "#10b981";
-const ROUTE_OPTIMAL_WEIGHT  = 6;
-const ROUTE_OPTIMAL_OPACITY = 0.85;
-const ROUTE_OPTIMAL_CLASS   = "route-optimal";
+/** Route polyline styling (see style.css for flowing-route animation) */
+const ROUTE_USER_COLOR     = "#ec4899";
+const ROUTE_USER_WEIGHT    = 7;
+const ROUTE_USER_OPACITY   = 0.8;
+const ROUTE_USER_CLASS     = "flowing-route";
+const ROUTE_OPTIMAL_COLOR    = "#10b981";
+const ROUTE_OPTIMAL_WEIGHT   = 4;
+const ROUTE_OPTIMAL_OPACITY  = 0.85;
+const ROUTE_OPTIMAL_CLASS    = "optimal-flowing-route";
 
 // ── Game State ─────────────────────────────────────────────────────────────
 

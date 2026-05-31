@@ -1030,16 +1030,38 @@ body::after {
 
 /* ── Route polylines (game.js className) ─────────────────────────── */
 
-.leaflet-overlay-pane path.route-user {
-  filter:
-    drop-shadow(0 0 2px rgba(236, 72, 153, 1))
-    drop-shadow(0 0 8px rgba(236, 72, 153, 0.65));
+@keyframes flowing-route-dash {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -30;
+  }
 }
 
-.leaflet-overlay-pane path.route-optimal {
+.leaflet-overlay-pane path.flowing-route {
+  stroke-dasharray: 15, 15 !important;
+  animation: flowing-route-dash 1.1s linear infinite;
+  filter:
+    drop-shadow(0 0 2px rgba(236, 72, 153, 1))
+    drop-shadow(0 0 10px rgba(236, 72, 153, 0.7));
+}
+
+@keyframes optimal-flow-dash {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.leaflet-overlay-pane path.optimal-flowing-route {
+  stroke-dasharray: 8, 12 !important;
+  animation: optimal-flow-dash 0.75s linear infinite;
   filter:
     drop-shadow(0 0 2px rgba(16, 185, 129, 1))
-    drop-shadow(0 0 10px rgba(16, 185, 129, 0.7));
+    drop-shadow(0 0 8px rgba(16, 185, 129, 0.65));
 }
 
 /* ── Utilities ───────────────────────────────────────────────────── */
