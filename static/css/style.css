@@ -1,0 +1,365 @@
+/* style.css — Delivery Game
+   All custom styles. No inline styles in HTML/JS.
+   Colour palette: dark navy bg, amber accent, clean sans-serif.
+*/
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg:          #0f172a;
+  --surface:     #1e293b;
+  --surface-alt: #263348;
+  --accent:      #f59e0b;
+  --accent-hover:#d97706;
+  --text:        #f1f5f9;
+  --text-muted:  #94a3b8;
+  --border:      #334155;
+  --success:     #22c55e;
+  --error:       #ef4444;
+  --radius:      8px;
+  --shadow:      0 4px 24px rgba(0,0,0,0.4);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+/* ── Layout ──────────────────────────────────────────────────────── */
+
+.container {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.container.has-map {
+  max-width: 900px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────── */
+
+.app-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.app-header .subtitle {
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+  font-size: 0.95rem;
+}
+
+/* ── Search Panel ────────────────────────────────────────────────── */
+
+.search-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+
+.search-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+#search-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 1rem;
+  padding: 0.65rem 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+#search-input:focus {
+  border-color: var(--accent);
+}
+
+#search-input::placeholder {
+  color: var(--text-muted);
+}
+
+#search-btn {
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  color: #0f172a;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.65rem 1.4rem;
+  transition: background 0.2s, transform 0.1s;
+  white-space: nowrap;
+}
+
+#search-btn:hover  { background: var(--accent-hover); }
+#search-btn:active { transform: scale(0.97); }
+#search-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status-msg {
+  font-size: 0.85rem;
+  margin-top: 0.6rem;
+  min-height: 1.2em;
+  color: var(--text-muted);
+}
+
+.status-msg.error   { color: var(--error); }
+.status-msg.success { color: var(--success); }
+
+/* ── Results List ────────────────────────────────────────────────── */
+
+.results-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.results-list {
+  list-style: none;
+}
+
+.results-list:empty {
+  display: none;
+}
+
+.result-item {
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  padding: 0.9rem 1.25rem;
+  transition: background 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.result-item:last-child { border-bottom: none; }
+
+.result-item:hover {
+  background: var(--surface-alt);
+}
+
+.result-item:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.result-name {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.result-coords {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-family: 'Consolas', monospace;
+}
+
+/* ── Selected Panel ──────────────────────────────────────────────── */
+
+.selected-panel {
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+  transition: opacity 0.3s;
+}
+
+.selected-panel h2 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+
+.selected-name {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.selected-coords {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-family: 'Consolas', monospace;
+  margin-top: 0.25rem;
+}
+
+/* ── Map ─────────────────────────────────────────────────────────── */
+
+.map-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.map-toolbar {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.map-hud {
+  flex: 1;
+  min-width: 200px;
+}
+
+.game-stage-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.game-time-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.score-panel {
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  line-height: 1.5;
+}
+
+.score-panel.success {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.map-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+#undo-btn,
+#evaluate-btn {
+  border: none;
+  border-radius: var(--radius);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.55rem 1rem;
+  transition: background 0.2s, opacity 0.2s;
+}
+
+#undo-btn {
+  background: var(--surface-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+#undo-btn:hover:not(:disabled) {
+  background: var(--border);
+}
+
+#evaluate-btn {
+  background: var(--success);
+}
+
+#evaluate-btn:hover:not(:disabled) {
+  background: #16a34a;
+}
+
+#undo-btn:disabled,
+#evaluate-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+#map {
+  width: 100%;
+  height: 420px;
+  background: var(--bg);
+}
+
+/* Leaflet marker pins (divIcon) */
+.leaflet-marker-icon.marker-pin {
+  background: transparent;
+  border: none;
+}
+
+.marker-pin__dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.marker-pin__dot--start {
+  background: #3b82f6;
+}
+
+.marker-pin__dot--stage1 {
+  background: #f97316;
+}
+
+.marker-pin__dot--stage2 {
+  background: #a855f7;
+}
+
+.marker-pin__dot--end {
+  background: #171717;
+}
+
+.marker-pin__dot--poi {
+  background: #ef4444;
+}
+
+.marker-pin__label {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.marker-pin--visited .marker-pin__dot {
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+/* ── Utilities ───────────────────────────────────────────────────── */
+
+.hidden { display: none !important; }
