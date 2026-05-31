@@ -36,6 +36,8 @@ const gameTimeLabel   = document.getElementById("game-time-label");
 const scorePanel      = document.getElementById("score-panel");
 const undoBtn         = document.getElementById("undo-btn");
 const evaluateBtn     = document.getElementById("evaluate-btn");
+const btnQuitGame     = document.getElementById("btn-quit-game");
+const btnSearchAnother = document.getElementById("btn-search-another");
 const survivalStats   = document.getElementById("survival-stats");
 const hpDisplay       = document.getElementById("hp-display");
 const levelDisplay    = document.getElementById("level-display");
@@ -43,6 +45,8 @@ const nextLevelBtn    = document.getElementById("next-level-btn");
 const gameOverPanel   = document.getElementById("game-over-panel");
 const gameOverMessage = document.getElementById("game-over-message");
 const restartGameBtn  = document.getElementById("restart-game-btn");
+const btnSearchBack   = document.getElementById("btn-search-back");
+const toastStack      = document.getElementById("toast-stack");
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -112,6 +116,9 @@ let optimalRouteLayer = null;
 let isSurvivalMode = false;
 let playerHP = 100;
 let currentLevel = 1;
+
+/** True after a successful route evaluation — locks undo until a new run. */
+let routeEvaluated = false;
 
 // ── Lobby ───────────────────────────────────────────────────────────────────
 
@@ -240,6 +247,20 @@ function showPracticeSearch() {
   setStatus("Search for your practice start location.", "");
   headerSubtitle.textContent =
     `${currentGameMode === "linear" ? "Linear" : "Parallel"} — Practice Mode`;
+}
+
+/** Leave practice search and return to main mode selection without starting a game. */
+function cancelPracticeSearch() {
+  searchSection.classList.add("hidden");
+  resultsPanel.classList.add("hidden");
+  selectedPanel.classList.add("hidden");
+  searchInput.value = "";
+  clearResults();
+  setStatus("", "");
+  showLobby();
+  menuMain.classList.remove("hidden");
+  menuSub.classList.add("hidden");
+  headerSubtitle.textContent = "Choose a game mode to begin";
 }
 
 function selectGameMode(mode) {
@@ -525,6 +546,7 @@ function resetGameState() {
   lastPoint = null;
   totalTimeSec = 0;
   gameBusy = false;
+  routeEvaluated = false;
   scorePanel.classList.add("hidden");
   scorePanel.textContent = "";
   scorePanel.classList.remove("success");
@@ -564,26 +586,26 @@ async function handlePoiClick(poi, role) {
 /** @param {object} poi @param {"stage1" | "stage2" | "end"} role */
 async function handleParallelPoiClick(poi, role) {
   if (role === "stage2" && currentStage === 1) {
-    alert("You must select a Stage 1 location first!");
+    showToast("You must select a Stage 1 location first!", "warning");
     return;
   }
   if (role === "stage1" && currentStage !== 1) {
-    alert("You already selected Stage 1. Pick a purple Stage 2 stop next.");
+    showToast("You already selected Stage 1. Pick a purple Stage 2 stop next.", "warning");
     return;
   }
   if (role === "stage2" && currentStage !== 2) {
     if (currentStage === 1) {
-      alert("You must select a Stage 1 location first!");
+      showToast("You must select a Stage 1 location first!", "warning");
     } else {
-      alert("Pick the black End point to finish your route.");
+      showToast("Pick the black End point to finish your route.", "warning");
     }
     return;
   }
   if (role === "end" && currentStage !== 3) {
     if (currentStage === 1) {
-      alert("You must select a Stage 1 location first!");
+      showToast("You must select a Stage 1 location first!", "warning");
     } else if (currentStage === 2) {
-      alert("You must select a Stage 2 location before the End!");
+      showToast("You must select a Stage 2 location before the End!", "warning");
     }
     return;
   }
@@ -606,11 +628,11 @@ async function handleParallelPoiClick(poi, role) {
 async function handleLinearPoiClick(poi, role) {
   if (role === "stop") {
     if (visitedStops.length >= 5) {
-      alert("You already visited all 5 stops. Click the End point!");
+      showToast("You already visited all 5 stops. Click the End point!", "warning");
       return;
     }
     if (isStopVisited(poi.id)) {
-      alert("You already visited this stop!");
+      showToast("You already visited this stop!", "warning");
       return;
     }
 
@@ -630,7 +652,7 @@ async function handleLinearPoiClick(poi, role) {
 
   if (role === "end") {
     if (visitedStops.length < 5) {
-      alert(`Visit all 5 stops first! (${visitedStops.length}/5 done)`);
+      showToast(`Visit all 5 stops first! (${visitedStops.length}/5 done)`, "warning");
       return;
     }
 
@@ -654,6 +676,7 @@ async function commitRouteLeg(poi, stage, onSuccess) {
   }
 
   gameBusy = true;
+  syncUndoControl();
   setPlayStatus("Calculating route…", "");
 
   const fromCoord = coordPayload(lastPoint);
@@ -673,6 +696,7 @@ async function commitRouteLeg(poi, stage, onSuccess) {
     setPlayStatus(`Route failed: ${err.message}`, "error");
   } finally {
     gameBusy = false;
+    syncUndoControl();
   }
 }
 
@@ -725,11 +749,11 @@ function addRouteLeg(geometry, durationSec, stage, poi, fromCoord, toCoord) {
     to:   coordPayload(toCoord),
   });
 
-  undoBtn.disabled = false;
+  syncUndoControl();
 }
 
 function undoLastStep() {
-  if (pathHistory.length === 0 || gameBusy) {
+  if (routeEvaluated || pathHistory.length === 0 || gameBusy) {
     return;
   }
 
@@ -744,9 +768,11 @@ function undoLastStep() {
   }
 
   scorePanel.classList.add("hidden");
+  scorePanel.classList.remove("success");
   clearOptimalRoute();
   evaluateBtn.disabled = true;
-  undoBtn.disabled = pathHistory.length === 0;
+  routeEvaluated = false;
+  syncUndoControl();
   updateGameHud();
   setStatus(getStageHint(), "");
 }
@@ -838,21 +864,69 @@ function updateGameHud() {
       : "No route legs yet.";
 }
 
-function showGameControls(visible) {
-  undoBtn.classList.toggle("hidden", !visible);
-  evaluateBtn.classList.toggle("hidden", !visible);
+function syncUndoControl() {
+  if (routeEvaluated) {
+    undoBtn.classList.add("hidden");
+    undoBtn.disabled = true;
+    return;
+  }
+  undoBtn.classList.remove("hidden");
+  undoBtn.disabled = pathHistory.length === 0 || gameBusy;
+}
+
+function hidePracticePlayAgainButton() {
+  btnSearchAnother.classList.add("hidden");
+}
+
+function showPracticePlayAgainButton() {
+  btnSearchAnother.classList.remove("hidden");
+}
+
+/** After practice evaluation — return to Nominatim search without leaving the mode. */
+function returnToPracticeSearch() {
+  if (isSurvivalMode || !currentGameMode) {
+    return;
+  }
+
+  hidePracticePlayAgainButton();
+  hideMap();
+  clearEvaluationUi();
+  selectedPanel.classList.add("hidden");
+  hideLobby();
+  searchSection.classList.remove("hidden");
+  searchInput.value = "";
+  clearResults();
+  setStatus("Search for your practice start location.", "");
+  headerSubtitle.textContent =
+    `${currentGameMode === "linear" ? "Linear" : "Parallel"} — Practice Mode`;
+}
+
+function lockUndoAfterEvaluation() {
+  routeEvaluated = true;
+  undoBtn.classList.add("hidden");
   undoBtn.disabled = true;
+}
+
+function showGameControls(visible) {
+  evaluateBtn.classList.toggle("hidden", !visible);
+  btnQuitGame.classList.toggle("hidden", !visible);
   evaluateBtn.disabled = true;
   if (!visible) {
+    undoBtn.classList.add("hidden");
+    undoBtn.disabled = true;
     nextLevelBtn.classList.add("hidden");
+    hidePracticePlayAgainButton();
+    return;
   }
+  hidePracticePlayAgainButton();
+  syncUndoControl();
 }
 
 // ── Evaluation ──────────────────────────────────────────────────────────────
 
 async function evaluateRoute() {
   if (!levelData || !isGameFinished()) {
-    alert("Finish your route by clicking the End point first.");
+    showToast("Finish your route by clicking the End point first.", "warning");
     return;
   }
 
@@ -902,11 +976,16 @@ async function evaluateRoute() {
       msg += ` HP lost: ${hpLost}. Remaining HP: ${Math.round(playerHP)}.`;
     }
 
-    alert(msg);
+    showToast(msg, "success", 9000);
     scorePanel.textContent = msg;
     scorePanel.classList.remove("hidden");
     scorePanel.classList.add("success");
+    lockUndoAfterEvaluation();
     setPlayStatus("Evaluation complete — green line is the optimal route.", "success");
+
+    if (!isSurvivalMode) {
+      showPracticePlayAgainButton();
+    }
 
     if (isSurvivalMode) {
       if (playerHP <= 0) {
@@ -931,6 +1010,9 @@ async function evaluateRoute() {
     }
   } finally {
     gameBusy = false;
+    if (!routeEvaluated) {
+      syncUndoControl();
+    }
   }
 }
 
@@ -1052,9 +1134,10 @@ function addGameMarker(poi, role, shortLabel) {
   });
 
   marker.bindTooltip(escapeHtml(poi.name), {
-    direction: "top",
-    offset:    [0, -14],
-    opacity:   0.95,
+    direction:  "top",
+    offset:     [0, -18],
+    opacity:    1,
+    className:  "cyber-tooltip",
   });
 
   if (role !== "start") {
@@ -1074,16 +1157,19 @@ function addGameMarker(poi, role, shortLabel) {
 }
 
 function createPinIcon(role, shortLabel, visited = false) {
-  const colorClass = `marker-pin__dot--${role}`;
+  const roleClass = `marker-pin__node--${role}`;
   const visitedClass = visited ? " marker-pin--visited" : "";
   return L.divIcon({
     className: `marker-pin${visitedClass}`,
     html: `
-      <div class="marker-pin__dot ${colorClass}"></div>
+      <div class="marker-pin__node ${roleClass}">
+        <span class="marker-pin__ring" aria-hidden="true"></span>
+        <span class="marker-pin__core" aria-hidden="true"></span>
+      </div>
       <span class="marker-pin__label">${escapeHtml(shortLabel)}</span>
     `,
-    iconSize:   [32, 38],
-    iconAnchor: [16, 18],
+    iconSize:   [36, 42],
+    iconAnchor: [18, 20],
   });
 }
 
@@ -1202,11 +1288,41 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+/** @param {string} message @param {"info" | "warning" | "success" | "error"} [type] */
+function showToast(message, type = "warning", durationMs = 4200) {
+  if (!toastStack || !message) {
+    return;
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `toast toast--${type}`;
+  toast.setAttribute("role", "status");
+  toast.innerHTML = `<span class="toast__text">${escapeHtml(message)}</span>`;
+
+  let timer;
+  const dismiss = () => {
+    clearTimeout(timer);
+    toast.classList.remove("toast--visible");
+    const remove = () => toast.remove();
+    toast.addEventListener("transitionend", remove, { once: true });
+    setTimeout(remove, 450);
+  };
+
+  toast.addEventListener("click", dismiss);
+  toastStack.appendChild(toast);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => toast.classList.add("toast--visible"));
+  });
+
+  timer = setTimeout(dismiss, durationMs);
+}
+
 // ── Event Listeners ────────────────────────────────────────────────────────
 
 btnParallelMode.addEventListener("click", () => selectGameMode("parallel"));
 btnLinearMode.addEventListener("click", () => selectGameMode("linear"));
 btnPractice.addEventListener("click", showPracticeSearch);
+btnSearchBack.addEventListener("click", cancelPracticeSearch);
 btnRandom.addEventListener("click", () => startSurvivalMode(false));
 nextLevelBtn.addEventListener("click", advanceToNextLevel);
 restartGameBtn.addEventListener("click", restartSurvivalGame);
@@ -1219,6 +1335,8 @@ searchInput.addEventListener("keydown", (e) => {
 
 undoBtn.addEventListener("click", undoLastStep);
 evaluateBtn.addEventListener("click", evaluateRoute);
+btnQuitGame.addEventListener("click", returnToMainMenu);
+btnSearchAnother.addEventListener("click", returnToPracticeSearch);
 
 initLobby();
 

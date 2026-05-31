@@ -74,6 +74,9 @@
           Search
         </button>
       </div>
+      <button id="btn-search-back" type="button" class="btn-search-back">
+        ← Back to Menu
+      </button>
       <p id="search-status" class="status-msg" aria-live="polite"></p>
     </section>
 
@@ -120,6 +123,12 @@
           <button id="next-level-btn" type="button" class="btn-secondary btn-secondary--survival hidden" disabled>
             Next Level
           </button>
+          <button id="btn-search-another" type="button" class="btn-secondary btn-secondary--survival hidden" aria-label="Search a new practice location">
+            Search Another Location
+          </button>
+          <button id="btn-quit-game" type="button" class="btn-secondary btn-secondary--ghost hidden" aria-label="Quit to main menu">
+            Quit to Menu
+          </button>
         </div>
       </div>
 
@@ -138,6 +147,8 @@
     </section>
 
   </div>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
 
   <script>
     const API_BASE = "";
