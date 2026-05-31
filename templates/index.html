@@ -3,7 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Delivery Game</title>
+  <title>Delivery Survival</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@500;700&display=swap"
+    rel="stylesheet"
+  />
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -17,97 +23,113 @@
   <div class="container">
 
     <header class="app-header">
-      <h1>🚚 Delivery Game</h1>
+      <p class="app-header__eyebrow">Neon Courier Protocol</p>
+      <h1 class="app-header__title">Delivery Survival</h1>
       <p id="header-subtitle" class="subtitle">Choose a game mode to begin</p>
-      <p id="survival-stats" class="survival-stats hidden" aria-live="polite">
-        <span id="hp-display">HP: 100</span>
-        <span class="survival-stats__sep">·</span>
-        <span id="level-display">Level: 1</span>
-      </p>
     </header>
 
     <!-- ── Game Lobby ────────────────────────────────────────────── -->
-    <section id="lobby-section" class="lobby-section" aria-label="Game lobby">
+    <section id="lobby-section" class="lobby-section glass-card" aria-label="Game lobby">
       <div id="menu-main" class="menu-panel">
         <h2 class="menu-title">Select Game Mode</h2>
+        <p class="menu-desc">Route optimization under pressure. Pick your run type.</p>
         <button id="btn-parallel-mode" type="button" class="menu-btn menu-btn--parallel">
-          Parallel Mode
+          <span class="menu-btn__label">Parallel Mode</span>
+          <span class="menu-btn__hint">Stage gates · 9 path combos</span>
         </button>
         <button id="btn-linear-mode" type="button" class="menu-btn menu-btn--linear">
-          Linear Mode
+          <span class="menu-btn__label">Linear Mode</span>
+          <span class="menu-btn__hint">Free order · classic TSP</span>
         </button>
       </div>
 
       <div id="menu-sub" class="menu-panel hidden">
         <h2 id="menu-sub-title" class="menu-title">Choose Setup</h2>
         <button id="btn-practice" type="button" class="menu-btn menu-btn--practice">
-          Practice Mode (Custom Location)
+          <span class="menu-btn__label">Practice Mode</span>
+          <span class="menu-btn__hint">Custom location search</span>
         </button>
         <button id="btn-random" type="button" class="menu-btn menu-btn--random">
-          Endless Survival Mode
+          <span class="menu-btn__label">Endless Survival</span>
+          <span class="menu-btn__hint">Random city · HP system</span>
         </button>
         <button id="btn-back-menu" type="button" class="menu-btn menu-btn--back">
-          ← Back
+          ← Back to Modes
         </button>
       </div>
     </section>
 
-    <!-- ── Search Panel (Practice only) ──────────────────────────── -->
-    <section id="search-section" class="search-panel hidden" aria-label="Location search">
+    <!-- ── Search Panel (Practice) ───────────────────────────────── -->
+    <section id="search-section" class="search-panel glass-card hidden" aria-label="Location search">
+      <h2 class="panel-label">Locate Start Point</h2>
       <div class="search-row">
         <input
           id="search-input"
           type="text"
-          placeholder="Search for a location…"
+          placeholder="Search city, district, or landmark…"
           autocomplete="off"
           aria-label="Location search query"
         />
-        <button id="search-btn" type="button" aria-label="Search">
+        <button id="search-btn" type="button" class="btn-primary" aria-label="Search">
           Search
         </button>
       </div>
       <p id="search-status" class="status-msg" aria-live="polite"></p>
     </section>
 
-    <!-- ── Results List (Practice search) ───────────────────────── -->
-    <section id="results-panel" class="results-panel hidden" aria-label="Search results">
+    <!-- ── Results List ──────────────────────────────────────────── -->
+    <section id="results-panel" class="results-panel glass-card hidden" aria-label="Search results">
       <ul id="results-list" class="results-list" role="list"></ul>
     </section>
 
-    <!-- ── Selected Location Display ─────────────────────────────── -->
-    <section id="selected-panel" class="selected-panel hidden" aria-label="Selected location">
+    <!-- ── Selected Location ───────────────────────────────────────── -->
+    <section id="selected-panel" class="selected-panel glass-card hidden" aria-label="Selected location">
       <h2>Start Point</h2>
       <p id="selected-name" class="selected-name"></p>
       <p id="selected-coords" class="selected-coords"></p>
     </section>
 
-    <!-- ── Leaflet Map ───────────────────────────────────────────── -->
+    <!-- ── Map & Game HUD ─────────────────────────────────────────── -->
     <section id="map-section" class="map-section hidden" aria-label="Delivery map">
-      <div class="map-toolbar">
+
+      <div id="survival-stats" class="hud-bar hidden" aria-live="polite">
+        <div class="hud-stat hud-stat--level">
+          <span class="hud-stat__label">LVL</span>
+          <span id="level-display" class="hud-stat__value">1</span>
+        </div>
+        <div class="hud-bar__title">SURVIVAL RUN</div>
+        <div class="hud-stat hud-stat--hp">
+          <span class="hud-stat__label">HP</span>
+          <span id="hp-display" class="hud-stat__value">100</span>
+        </div>
+      </div>
+
+      <div class="map-toolbar glass-card-inner">
         <div class="map-hud">
           <p id="game-stage-label" class="game-stage-label"></p>
           <p id="game-time-label" class="game-time-label"></p>
-          <p id="score-panel" class="score-panel hidden" aria-live="polite"></p>
+          <div id="score-panel" class="score-panel mission-complete hidden" aria-live="polite"></div>
         </div>
         <div class="map-actions">
-          <button id="undo-btn" type="button" class="hidden" disabled>
+          <button id="undo-btn" type="button" class="btn-secondary btn-secondary--ghost hidden" disabled>
             Undo Last Step
           </button>
-          <button id="evaluate-btn" type="button" class="hidden" disabled>
+          <button id="evaluate-btn" type="button" class="btn-secondary btn-secondary--success hidden" disabled>
             Evaluate Route
           </button>
-          <button id="next-level-btn" type="button" class="hidden menu-btn menu-btn--random">
+          <button id="next-level-btn" type="button" class="btn-secondary btn-secondary--survival hidden" disabled>
             Next Level
           </button>
         </div>
       </div>
+
       <div id="map" role="application" aria-label="Map of delivery POIs"></div>
     </section>
 
-    <!-- ── Game Over (Survival) ──────────────────────────────────── -->
-    <section id="game-over-panel" class="lobby-section hidden" aria-label="Game over">
-      <h2 class="menu-title">Game Over</h2>
-      <p id="game-over-message" class="game-time-label">
+    <!-- ── Game Over ───────────────────────────────────────────────── -->
+    <section id="game-over-panel" class="game-over-panel glass-card hidden" aria-label="Game over">
+      <h2 class="game-over-panel__title">Game Over</h2>
+      <p id="game-over-message" class="game-over-panel__message">
         Your HP reached 0. Better luck next run!
       </p>
       <button id="restart-game-btn" type="button" class="menu-btn menu-btn--practice">
@@ -116,20 +138,6 @@
     </section>
 
   </div>
-
-  <style>
-    .survival-stats {
-      margin-top: 0.5rem;
-      font-size: 1rem;
-      font-weight: 600;
-      color: #f59e0b;
-    }
-    .survival-stats__sep { margin: 0 0.35rem; opacity: 0.7; }
-    #hp-display.low-hp { color: #ef4444; }
-    #next-level-btn { font-size: 0.85rem; padding: 0.55rem 1rem; }
-    #game-over-panel { text-align: center; }
-    #game-over-panel .game-time-label { margin: 0.75rem 0 1rem; }
-  </style>
 
   <script>
     const API_BASE = "";
