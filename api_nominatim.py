@@ -15,7 +15,7 @@ _HEADERS   = {"User-Agent": "DeliveryGame/1.0 (Contact: ivan.yc.tsai@gmail.com)"
 _TIMEOUT   = 3  # seconds — hard limit, never increase
 
 
-def search_locations(query: str, limit: int = 5) -> list[dict]:
+def search_locations(query: str, limit: int = 15) -> list[dict]:
     """
     Search Nominatim for places matching *query*.
 

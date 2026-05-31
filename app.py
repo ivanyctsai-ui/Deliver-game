@@ -89,7 +89,7 @@ def api_search():
 
     Query params:
         q     (str, required): free-text location query
-        limit (int, optional): max results, default 5, clamped to [1, 10]
+        limit (int, optional): max results, default 15, clamped to [1, 15]
 
     Returns:
         200 + JSON list on success (may be empty list).
@@ -100,10 +100,10 @@ def api_search():
         return jsonify({"error": "Missing required parameter: q"}), 400
 
     try:
-        limit = int(request.args.get("limit", 5))
-        limit = max(1, min(limit, 10))  # clamp to safe range
+        limit = int(request.args.get("limit", 15))
+        limit = max(1, min(limit, 15))  # clamp to safe range
     except ValueError:
-        limit = 5
+        limit = 15
 
     results = search_locations(query, limit=limit)
     return jsonify(results)

@@ -26,6 +26,10 @@ const searchBtn       = document.getElementById("search-btn");
 const statusMsg       = document.getElementById("search-status");
 const resultsPanel    = document.getElementById("results-panel");
 const resultsList     = document.getElementById("results-list");
+const resultsPagination = document.getElementById("results-pagination");
+const resultsPrev     = document.getElementById("results-prev");
+const resultsNext     = document.getElementById("results-next");
+const resultsPageInfo = document.getElementById("results-page-info");
 const selectedPanel   = document.getElementById("selected-panel");
 const selectedName    = document.getElementById("selected-name");
 const selectedCoords  = document.getElementById("selected-coords");
@@ -72,6 +76,13 @@ const RANDOM_CITIES = [
 ];
 
 const START_OFFSET_DEG = 0.004;
+
+const SEARCH_FETCH_LIMIT = 15;
+const SEARCH_PAGE_SIZE   = 5;
+
+/** @type {Array<{name: string, lat: number, lon: number}>} */
+let cachedSearchResults = [];
+let searchResultsPage = 0;
 
 /** Immersive map marker labels */
 const LABEL_DISPATCH = "[DISPATCH]";
@@ -384,7 +395,8 @@ async function performSearch() {
   setStatus("Searching…", "");
 
   try {
-    const url = `${API_BASE}/api/search?q=${encodeURIComponent(query)}`;
+    const url =
+      `${API_BASE}/api/search?q=${encodeURIComponent(query)}&limit=${SEARCH_FETCH_LIMIT}`;
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -399,10 +411,15 @@ async function performSearch() {
 
     renderResults(results);
 
-    if (results.length === 0) {
+    if (cachedSearchResults.length === 0) {
       setStatus("No locations found. Try a different search.", "");
     } else {
-      setStatus(`Found ${results.length} result${results.length !== 1 ? "s" : ""}.`, "success");
+      const pages = Math.ceil(cachedSearchResults.length / SEARCH_PAGE_SIZE);
+      setStatus(
+        `Found ${cachedSearchResults.length} result${cachedSearchResults.length !== 1 ? "s" : ""}` +
+        (pages > 1 ? ` — showing page 1 of ${pages}.` : "."),
+        "success",
+      );
     }
   } catch (err) {
     setStatus(`Search failed: ${err.message}`, "error");
@@ -1230,10 +1247,80 @@ function hideResultsPanel() {
 function clearResults() {
   clearResultsList();
   hideResultsPanel();
+  cachedSearchResults = [];
+  searchResultsPage = 0;
+  hideResultsPagination();
+}
+
+function hideResultsPagination() {
+  resultsPagination.classList.add("hidden");
+}
+
+function updateResultsPaginationUi() {
+  const total = cachedSearchResults.length;
+  const totalPages = Math.max(1, Math.ceil(total / SEARCH_PAGE_SIZE));
+
+  if (total === 0 || totalPages <= 1) {
+    hideResultsPagination();
+    return;
+  }
+
+  resultsPagination.classList.remove("hidden");
+  resultsPageInfo.textContent = `Page ${searchResultsPage + 1} of ${totalPages}`;
+  resultsPrev.disabled = searchResultsPage <= 0;
+  resultsNext.disabled = searchResultsPage >= totalPages - 1;
+}
+
+function appendResultItem(poi, lat, lon) {
+  const li = document.createElement("li");
+  li.className = "result-item";
+  li.setAttribute("role", "listitem");
+  li.setAttribute("tabindex", "0");
+  li.setAttribute("aria-label", poi.name);
+
+  li.innerHTML = `
+    <span class="result-name">${escapeHtml(poi.name)}</span>
+    <span class="result-coords">${Number(lat).toFixed(5)}, ${Number(lon).toFixed(5)}</span>
+  `;
+
+  li.addEventListener("click", () => loadLevel({ name: poi.name, lat, lon }));
+  li.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      loadLevel({ name: poi.name, lat, lon });
+    }
+  });
+
+  resultsList.appendChild(li);
+}
+
+function renderResultsPage() {
+  clearResultsList();
+
+  const start = searchResultsPage * SEARCH_PAGE_SIZE;
+  const pageItems = cachedSearchResults.slice(start, start + SEARCH_PAGE_SIZE);
+
+  pageItems.forEach((poi) => {
+    appendResultItem(poi, poi.lat, poi.lon);
+  });
+
+  if (cachedSearchResults.length > 0) {
+    showResultsPanel();
+  } else {
+    hideResultsPanel();
+  }
+
+  updateResultsPaginationUi();
 }
 
 function renderResults(results) {
-  clearResultsList();
+  cachedSearchResults = [];
+  searchResultsPage = 0;
+
+  if (!Array.isArray(results)) {
+    renderResultsPage();
+    return;
+  }
 
   results.forEach((poi, index) => {
     const lat = poi.lat ?? poi.latitude;
@@ -1244,33 +1331,32 @@ function renderResults(results) {
       return;
     }
 
-    const li = document.createElement("li");
-    li.className = "result-item";
-    li.setAttribute("role", "listitem");
-    li.setAttribute("tabindex", "0");
-    li.setAttribute("aria-label", poi.name);
-
-    li.innerHTML = `
-      <span class="result-name">${escapeHtml(poi.name)}</span>
-      <span class="result-coords">${lat.toFixed(5)}, ${lon.toFixed(5)}</span>
-    `;
-
-    li.addEventListener("click", () => loadLevel({ name: poi.name, lat, lon }));
-    li.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        loadLevel({ name: poi.name, lat, lon });
-      }
+    cachedSearchResults.push({
+      name: poi.name,
+      lat:  Number(lat),
+      lon:  Number(lon),
     });
-
-    resultsList.appendChild(li);
   });
 
-  if (results.length > 0) {
-    showResultsPanel();
-  } else {
-    hideResultsPanel();
+  renderResultsPage();
+}
+
+function goToSearchResultsPage(delta) {
+  const totalPages = Math.ceil(cachedSearchResults.length / SEARCH_PAGE_SIZE);
+  const nextPage = searchResultsPage + delta;
+
+  if (nextPage < 0 || nextPage >= totalPages) {
+    return;
   }
+
+  searchResultsPage = nextPage;
+  renderResultsPage();
+  setStatus(
+    `Showing results ${searchResultsPage * SEARCH_PAGE_SIZE + 1}–` +
+    `${Math.min((searchResultsPage + 1) * SEARCH_PAGE_SIZE, cachedSearchResults.length)} ` +
+    `of ${cachedSearchResults.length}.`,
+    "success",
+  );
 }
 
 function setStatus(message, type) {
@@ -1349,6 +1435,8 @@ searchBtn.addEventListener("click", performSearch);
 searchInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") performSearch();
 });
+resultsPrev.addEventListener("click", () => goToSearchResultsPage(-1));
+resultsNext.addEventListener("click", () => goToSearchResultsPage(1));
 
 undoBtn.addEventListener("click", undoLastStep);
 evaluateBtn.addEventListener("click", evaluateRoute);

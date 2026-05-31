@@ -74,6 +74,9 @@
           Search
         </button>
       </div>
+      <p class="search-hint">
+        Hint: Try searching &ldquo;City, District&rdquo; or a specific landmark (e.g., &ldquo;Taipei 101&rdquo;) for better results.
+      </p>
       <button id="btn-search-back" type="button" class="btn-search-back">
         ← Back to Menu
       </button>
@@ -83,6 +86,11 @@
     <!-- ── Results List ──────────────────────────────────────────── -->
     <section id="results-panel" class="results-panel glass-card hidden" aria-label="Search results">
       <ul id="results-list" class="results-list" role="list"></ul>
+      <nav id="results-pagination" class="results-pagination hidden" aria-label="Search results pages">
+        <button id="results-prev" type="button" class="results-page-btn">← Prev</button>
+        <span id="results-page-info" class="results-page-info"></span>
+        <button id="results-next" type="button" class="results-page-btn">Next →</button>
+      </nav>
     </section>
 
     <!-- ── Selected Location ───────────────────────────────────────── -->
