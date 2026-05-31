@@ -73,6 +73,23 @@ const RANDOM_CITIES = [
 
 const START_OFFSET_DEG = 0.004;
 
+/** Immersive map marker labels */
+const LABEL_DISPATCH = "[DISPATCH]";
+const LABEL_CLIENT   = "[CLIENT]";
+const LABEL_PICKUP_A = "[PICKUP A]";
+const LABEL_PICKUP_B = "[PICKUP B]";
+const LABEL_DROP_OFF = "[DROP-OFF]";
+
+/** Route polyline styling (see style.css for glow) */
+const ROUTE_USER_COLOR    = "#ec4899";
+const ROUTE_USER_WEIGHT   = 5;
+const ROUTE_USER_OPACITY  = 0.8;
+const ROUTE_USER_CLASS    = "route-user";
+const ROUTE_OPTIMAL_COLOR   = "#10b981";
+const ROUTE_OPTIMAL_WEIGHT  = 6;
+const ROUTE_OPTIMAL_OPACITY = 0.85;
+const ROUTE_OPTIMAL_CLASS   = "route-optimal";
+
 // ── Game State ─────────────────────────────────────────────────────────────
 
 /** @type {null | 'parallel' | 'linear'} */
@@ -586,26 +603,26 @@ async function handlePoiClick(poi, role) {
 /** @param {object} poi @param {"stage1" | "stage2" | "end"} role */
 async function handleParallelPoiClick(poi, role) {
   if (role === "stage2" && currentStage === 1) {
-    showToast("You must select a Stage 1 location first!", "warning");
+    showToast("Select a Pickup A location first!", "warning");
     return;
   }
   if (role === "stage1" && currentStage !== 1) {
-    showToast("You already selected Stage 1. Pick a purple Stage 2 stop next.", "warning");
+    showToast("Pickup A is done. Head to a Pickup B location next.", "warning");
     return;
   }
   if (role === "stage2" && currentStage !== 2) {
     if (currentStage === 1) {
-      showToast("You must select a Stage 1 location first!", "warning");
+      showToast("Select a Pickup A location first!", "warning");
     } else {
-      showToast("Pick the black End point to finish your route.", "warning");
+      showToast(`Proceed to ${LABEL_CLIENT} to complete the delivery.`, "warning");
     }
     return;
   }
   if (role === "end" && currentStage !== 3) {
     if (currentStage === 1) {
-      showToast("You must select a Stage 1 location first!", "warning");
+      showToast("Select a Pickup A location first!", "warning");
     } else if (currentStage === 2) {
-      showToast("You must select a Stage 2 location before the End!", "warning");
+      showToast(`Select a Pickup B location before ${LABEL_CLIENT}.`, "warning");
     }
     return;
   }
@@ -628,11 +645,11 @@ async function handleParallelPoiClick(poi, role) {
 async function handleLinearPoiClick(poi, role) {
   if (role === "stop") {
     if (visitedStops.length >= 5) {
-      showToast("You already visited all 5 stops. Click the End point!", "warning");
+      showToast(`All Drop-offs complete. Proceed to ${LABEL_CLIENT}.`, "warning");
       return;
     }
     if (isStopVisited(poi.id)) {
-      showToast("You already visited this stop!", "warning");
+      showToast("You already delivered to this Drop-off.", "warning");
       return;
     }
 
@@ -642,7 +659,7 @@ async function handleLinearPoiClick(poi, role) {
       visitedStops.push(poiData);
       refreshStopMarkerStyle(poiData.id);
       if (visitedStops.length === 5) {
-        setPlayStatus("All stops visited! Click the black End point.", "success");
+        setPlayStatus(`All Drop-offs complete! Proceed to ${LABEL_CLIENT}.`, "success");
       } else {
         setPlayStatus(getStageHint(), "success");
       }
@@ -652,7 +669,7 @@ async function handleLinearPoiClick(poi, role) {
 
   if (role === "end") {
     if (visitedStops.length < 5) {
-      showToast(`Visit all 5 stops first! (${visitedStops.length}/5 done)`, "warning");
+      showToast(`Deliver to all 5 Drop-offs first! (${visitedStops.length}/5 done)`, "warning");
       return;
     }
 
@@ -734,10 +751,11 @@ function addRouteLeg(geometry, durationSec, stage, poi, fromCoord, toCoord) {
   }
 
   const polyline = L.polyline(geometry, {
-    color:    "#3b82f6",
-    weight:   5,
-    opacity:  0.9,
-    lineJoin: "round",
+    color:     ROUTE_USER_COLOR,
+    weight:    ROUTE_USER_WEIGHT,
+    opacity:   ROUTE_USER_OPACITY,
+    lineJoin:  "round",
+    className: ROUTE_USER_CLASS,
   }).addTo(userRouteLayerGroup);
 
   pathHistory.push({
@@ -813,9 +831,7 @@ function refreshStopMarkerStyle(poiRef) {
   if (!poi?._marker || !levelData?.pois) {
     return;
   }
-  const idx = levelData.pois.findIndex((p) => p.id === poi.id);
-  const label = idx >= 0 ? `P${idx + 1}` : "P";
-  poi._marker.setIcon(createPinIcon("stop", label, isStopVisited(poi.id)));
+  poi._marker.setIcon(createPinIcon("stop", LABEL_DROP_OFF, isStopVisited(poi.id)));
 }
 
 function undoLinearStep(last) {
@@ -837,17 +853,17 @@ function undoLinearStep(last) {
 
 function getStageHint() {
   if (isParallelMode()) {
-    if (currentStage === 1) return "Click an orange Stage 1 stop.";
-    if (currentStage === 2) return "Click a purple Stage 2 stop.";
-    if (currentStage === 3) return "Click the black End point.";
+    if (currentStage === 1) return "Collect at any Pickup A (orange marker).";
+    if (currentStage === 2) return "Collect at any Pickup B (purple marker).";
+    if (currentStage === 3) return `Deliver to ${LABEL_CLIENT}.`;
     return "Route complete — evaluate when ready.";
   }
 
   if (visitedStops.length < 5) {
-    return `Click a teal stop (${visitedStops.length}/5 visited). Any order is fine.`;
+    return `Deliver to any Drop-off (${visitedStops.length}/5 done). Order is flexible.`;
   }
   if (!linearGameComplete) {
-    return "Click the black End point.";
+    return `Proceed to ${LABEL_CLIENT}.`;
   }
   return "Route complete — evaluate when ready.";
 }
@@ -926,7 +942,7 @@ function showGameControls(visible) {
 
 async function evaluateRoute() {
   if (!levelData || !isGameFinished()) {
-    showToast("Finish your route by clicking the End point first.", "warning");
+    showToast(`Finish your route at ${LABEL_CLIENT} first.`, "warning");
     return;
   }
 
@@ -981,7 +997,7 @@ async function evaluateRoute() {
     scorePanel.classList.remove("hidden");
     scorePanel.classList.add("success");
     lockUndoAfterEvaluation();
-    setPlayStatus("Evaluation complete — green line is the optimal route.", "success");
+    setPlayStatus("Evaluation complete — neon green line is the optimal courier path.", "success");
 
     if (!isSurvivalMode) {
       showPracticePlayAgainButton();
@@ -1041,10 +1057,11 @@ function drawOptimalRoute(geometry) {
   clearOptimalRoute();
 
   optimalRouteLayer = L.polyline(geometry, {
-    color:    "#22c55e",
-    weight:   8,
-    opacity:  0.75,
-    lineJoin: "round",
+    color:     ROUTE_OPTIMAL_COLOR,
+    weight:    ROUTE_OPTIMAL_WEIGHT,
+    opacity:   ROUTE_OPTIMAL_OPACITY,
+    lineJoin:  "round",
+    className: ROUTE_OPTIMAL_CLASS,
   }).addTo(mapInstance);
 
   const allBounds = L.latLngBounds(geometry);
@@ -1096,26 +1113,26 @@ function renderMap(level) {
 
   const bounds = L.latLngBounds([[level.start.lat, level.start.lon]]);
 
-  addGameMarker(level.start, "start", "START");
+  addGameMarker(level.start, "start", LABEL_DISPATCH);
   bounds.extend([level.start.lat, level.start.lon]);
 
   if (isParallelMode()) {
-    level.stage1.forEach((poi, i) => {
-      addGameMarker(poi, "stage1", `S1-${i + 1}`);
+    level.stage1.forEach((poi) => {
+      addGameMarker(poi, "stage1", LABEL_PICKUP_A);
       bounds.extend([poi.lat, poi.lon]);
     });
-    level.stage2.forEach((poi, i) => {
-      addGameMarker(poi, "stage2", `S2-${i + 1}`);
+    level.stage2.forEach((poi) => {
+      addGameMarker(poi, "stage2", LABEL_PICKUP_B);
       bounds.extend([poi.lat, poi.lon]);
     });
   } else {
-    level.pois.forEach((poi, i) => {
-      addGameMarker(poi, "stop", `P${i + 1}`);
+    level.pois.forEach((poi) => {
+      addGameMarker(poi, "stop", LABEL_DROP_OFF);
       bounds.extend([poi.lat, poi.lon]);
     });
   }
 
-  addGameMarker(level.end, "end", "END");
+  addGameMarker(level.end, "end", LABEL_CLIENT);
   bounds.extend([level.end.lat, level.end.lon]);
 
   if (bounds.isValid()) {

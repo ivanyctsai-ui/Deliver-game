@@ -966,57 +966,80 @@ body::after {
 }
 
 .marker-pin__label {
-  display: block;
+  display: inline-block;
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: 0.62rem;
   font-weight: 700;
   text-align: center;
-  color: var(--neon-cyan);
-  text-shadow:
-    0 0 8px var(--cyan-glow),
-    0 1px 4px rgba(0, 0, 0, 0.95);
-  margin-top: 3px;
+  color: #ffffff;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: none;
+  background-color: rgba(15, 23, 42, 0.9);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   white-space: nowrap;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
+  text-shadow: none;
 }
 
-/* ── Leaflet tooltips ────────────────────────────────────────────── */
+/* ── Leaflet tooltips (hover labels + cyber-tooltip class) ─────── */
 
 .leaflet-tooltip.cyber-tooltip,
 .leaflet-tooltip {
-  background: rgba(15, 23, 42, 0.88) !important;
-  border: 1px solid rgba(148, 163, 184, 0.28) !important;
-  border-radius: var(--radius-sm) !important;
-  color: var(--neon-cyan) !important;
+  background-color: rgba(15, 23, 42, 0.9) !important;
+  background: rgba(15, 23, 42, 0.9) !important;
+  border: none !important;
+  border-radius: 6px !important;
+  color: #ffffff !important;
   font-family: var(--font-ui) !important;
   font-size: 0.78rem !important;
-  font-weight: 500 !important;
-  padding: 0.4rem 0.65rem !important;
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.55),
-    0 0 14px var(--cyan-glow) !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+  padding: 4px 8px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .leaflet-tooltip-top.cyber-tooltip::before,
 .leaflet-tooltip-top::before {
-  border-top-color: rgba(15, 23, 42, 0.88) !important;
+  border: none !important;
+  border-top-color: rgba(15, 23, 42, 0.9) !important;
 }
 
 .leaflet-tooltip-bottom.cyber-tooltip::before,
 .leaflet-tooltip-bottom::before {
-  border-bottom-color: rgba(15, 23, 42, 0.88) !important;
+  border: none !important;
+  border-bottom-color: rgba(15, 23, 42, 0.9) !important;
 }
 
 .leaflet-tooltip-left.cyber-tooltip::before,
 .leaflet-tooltip-left::before {
-  border-left-color: rgba(15, 23, 42, 0.88) !important;
+  border: none !important;
+  border-left-color: rgba(15, 23, 42, 0.9) !important;
 }
 
 .leaflet-tooltip-right.cyber-tooltip::before,
 .leaflet-tooltip-right::before {
-  border-right-color: rgba(15, 23, 42, 0.88) !important;
+  border: none !important;
+  border-right-color: rgba(15, 23, 42, 0.9) !important;
+}
+
+/* ── Route polylines (game.js className) ─────────────────────────── */
+
+.leaflet-overlay-pane path.route-user {
+  filter:
+    drop-shadow(0 0 2px rgba(236, 72, 153, 1))
+    drop-shadow(0 0 8px rgba(236, 72, 153, 0.65));
+}
+
+.leaflet-overlay-pane path.route-optimal {
+  filter:
+    drop-shadow(0 0 2px rgba(16, 185, 129, 1))
+    drop-shadow(0 0 10px rgba(16, 185, 129, 0.7));
 }
 
 /* ── Utilities ───────────────────────────────────────────────────── */
