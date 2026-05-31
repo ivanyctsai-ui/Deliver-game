@@ -34,6 +34,18 @@ def index():
     return render_template("index.html")
 
 
+def _survival_response_meta() -> dict:
+    """Optional survival-mode fields when client passes ?survival=1&level=N."""
+    flag = request.args.get("survival", "").strip().lower()
+    if flag not in ("1", "true", "yes"):
+        return {}
+    try:
+        level_num = max(1, int(request.args.get("level", "1")))
+    except ValueError:
+        level_num = 1
+    return {"survival": True, "survival_level": level_num}
+
+
 def _jitter_level_split(
     start: dict,
     poi_groups: list[list[dict]],
@@ -102,10 +114,10 @@ def api_generate_level():
     """
     GET /api/generate_level?lat=<float>&lon=<float>&name=<start name>
 
-    Query param mode: "parallel" (default) or "linear".
-
-    Parallel → 8 points (start + 3 stage1 + 3 stage2 + end).
-    Linear   → 7 points (start + 5 stops + end).
+    Query params:
+        mode     — "parallel" (default) or "linear"
+        survival — "1" for endless survival (echoes survival_level in JSON)
+        level    — survival level number (default 1)
     """
     lat_raw = request.args.get("lat", "").strip()
     lon_raw = request.args.get("lon", "").strip()
@@ -139,12 +151,14 @@ def api_generate_level():
             [linear_pois["pois"]],
             linear_pois["end"],
         )
-        return jsonify({
+        payload = {
             "mode":  "linear",
             "start": start_j,
             "pois":  linear_groups_j[0],
             "end":   end_j,
-        })
+        }
+        payload.update(_survival_response_meta())
+        return jsonify(payload)
 
     level_pois = generate_level_pois(lat, lon)
     start_j, groups_j, end_j = _jitter_level_split(
@@ -152,13 +166,15 @@ def api_generate_level():
         [level_pois["stage1"], level_pois["stage2"]],
         level_pois["end"],
     )
-    return jsonify({
+    payload = {
         "mode":   "parallel",
         "start":  start_j,
         "stage1": groups_j[0],
         "stage2": groups_j[1],
         "end":    end_j,
-    })
+    }
+    payload.update(_survival_response_meta())
+    return jsonify(payload)
 
 
 @app.route("/api/route_leg", methods=["POST"])

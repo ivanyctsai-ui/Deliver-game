@@ -36,10 +36,38 @@ const gameTimeLabel   = document.getElementById("game-time-label");
 const scorePanel      = document.getElementById("score-panel");
 const undoBtn         = document.getElementById("undo-btn");
 const evaluateBtn     = document.getElementById("evaluate-btn");
+const survivalStats   = document.getElementById("survival-stats");
+const hpDisplay       = document.getElementById("hp-display");
+const levelDisplay    = document.getElementById("level-display");
+const nextLevelBtn    = document.getElementById("next-level-btn");
+const gameOverPanel   = document.getElementById("game-over-panel");
+const gameOverMessage = document.getElementById("game-over-message");
+const restartGameBtn  = document.getElementById("restart-game-btn");
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const RANDOM_CITIES = ["Taipei", "Tokyo", "New York", "London"];
+const RANDOM_CITIES = [
+  "Taipei",
+  "Tokyo",
+  "Seoul",
+  "Singapore",
+  "Hong Kong",
+  "Bangkok",
+  "Sydney",
+  "London",
+  "Paris",
+  "Berlin",
+  "New York",
+  "Los Angeles",
+  "Chicago",
+  "Toronto",
+  "São Paulo",
+  "Mexico City",
+  "Dubai",
+  "Istanbul",
+];
+
+const START_OFFSET_DEG = 0.004;
 
 // ── Game State ─────────────────────────────────────────────────────────────
 
@@ -80,13 +108,97 @@ let userRouteLayerGroup = null;
 /** @type {L.Polyline | null} */
 let optimalRouteLayer = null;
 
+/** Endless Survival (Random Mode) */
+let isSurvivalMode = false;
+let playerHP = 100;
+let currentLevel = 1;
+
 // ── Lobby ───────────────────────────────────────────────────────────────────
 
 function initLobby() {
   currentGameMode = null;
+  isSurvivalMode = false;
   showLobby();
   hideGameplayUi();
+  hideSurvivalOverlays();
   headerSubtitle.textContent = "Choose a game mode to begin";
+}
+
+function resetSurvivalProgress() {
+  playerHP = 100;
+  currentLevel = 1;
+  updateSurvivalHud();
+}
+
+function updateSurvivalHud() {
+  hpDisplay.textContent = `HP: ${Math.max(0, Math.round(playerHP))}`;
+  levelDisplay.textContent = `Level: ${currentLevel}`;
+  hpDisplay.classList.toggle("low-hp", playerHP <= 25);
+}
+
+function showSurvivalHud(visible) {
+  survivalStats.classList.toggle("hidden", !visible);
+  if (visible) {
+    updateSurvivalHud();
+  }
+}
+
+function hideSurvivalOverlays() {
+  nextLevelBtn.classList.add("hidden");
+  nextLevelBtn.disabled = true;
+  gameOverPanel.classList.add("hidden");
+}
+
+/** Reset evaluation / route summary UI so it does not leak onto the main menu. */
+function clearEvaluationUi() {
+  scorePanel.textContent = "";
+  scorePanel.classList.add("hidden");
+  scorePanel.classList.remove("success");
+  gameStageLabel.textContent = "";
+  gameStageLabel.style.color = "";
+  gameTimeLabel.textContent = "";
+}
+
+function returnToMainMenu() {
+  isSurvivalMode = false;
+  currentGameMode = null;
+  hideMap();
+  clearEvaluationUi();
+  hideGameplayUi();
+  hideSurvivalOverlays();
+  setStatus("", "");
+  showLobby();
+  headerSubtitle.textContent = "Choose a game mode to begin";
+}
+
+function showNextLevelButton() {
+  nextLevelBtn.classList.remove("hidden");
+  nextLevelBtn.disabled = false;
+}
+
+function showGameOverScreen(message) {
+  gameOverMessage.textContent = message;
+  gameOverPanel.classList.remove("hidden");
+  mapSection.classList.add("hidden");
+  nextLevelBtn.classList.add("hidden");
+}
+
+/**
+ * Nudge start coordinates so the same city does not always spawn at its center.
+ * @param {number} lat
+ * @param {number} lon
+ */
+function applyRandomStartOffset(lat, lon) {
+  const dLat = (Math.random() * 2 - 1) * START_OFFSET_DEG;
+  const dLon = (Math.random() * 2 - 1) * START_OFFSET_DEG;
+  return {
+    lat: Math.max(-90, Math.min(90, lat + dLat)),
+    lon: Math.max(-180, Math.min(180, lon + dLon)),
+  };
+}
+
+function pickRandomCity() {
+  return RANDOM_CITIES[Math.floor(Math.random() * RANDOM_CITIES.length)];
 }
 
 function showLobby() {
@@ -112,9 +224,12 @@ function hideGameplayUi() {
   resultsPanel.classList.add("hidden");
   selectedPanel.classList.add("hidden");
   mapSection.classList.add("hidden");
+  gameOverPanel.classList.add("hidden");
   container.classList.remove("has-map");
   clearResults();
+  clearEvaluationUi();
   showGameControls(false);
+  showSurvivalHud(false);
 }
 
 function showPracticeSearch() {
@@ -132,15 +247,30 @@ function selectGameMode(mode) {
   showSubMenu();
 }
 
-async function startRandomMode() {
+async function startSurvivalMode(continueRun = false) {
   if (!currentGameMode) {
     return;
   }
 
+  isSurvivalMode = true;
+  if (!continueRun) {
+    resetSurvivalProgress();
+  }
+
   hideLobby();
   hideGameplayUi();
-  const city = RANDOM_CITIES[Math.floor(Math.random() * RANDOM_CITIES.length)];
-  setStatus(`Loading random city: ${city}…`, "");
+  hideSurvivalOverlays();
+  showSurvivalHud(true);
+
+  headerSubtitle.textContent =
+    `${currentGameMode === "linear" ? "Linear" : "Parallel"} — Endless Survival`;
+
+  await loadRandomSurvivalLevel();
+}
+
+async function loadRandomSurvivalLevel() {
+  const city = pickRandomCity();
+  setStatus(`Level ${currentLevel} — loading ${city}…`, "");
 
   try {
     const response = await fetch(
@@ -157,22 +287,49 @@ async function startRandomMode() {
       throw new Error(`No results for ${city}.`);
     }
 
-    const lat = results[0].lat ?? results[0].latitude;
-    const lon = results[0].lon ?? results[0].longitude ?? results[0].lng;
+    const baseLat = results[0].lat ?? results[0].latitude;
+    const baseLon = results[0].lon ?? results[0].longitude ?? results[0].lng;
 
-    if (lat == null || lon == null) {
+    if (baseLat == null || baseLon == null) {
       throw new Error("Random city result missing coordinates.");
     }
 
+    const offset = applyRandomStartOffset(Number(baseLat), Number(baseLon));
+
     await loadLevel({
-      name: results[0].name || city,
-      lat,
-      lon,
+      name: `${results[0].name || city} (Survival Lv.${currentLevel})`,
+      lat:  offset.lat,
+      lon:  offset.lon,
     });
   } catch (err) {
-    setStatus(`Random mode failed: ${err.message}`, "error");
-    showSubMenu();
+    setStatus(`Survival load failed: ${err.message}`, "error");
+    if (playerHP > 0 && currentLevel > 1) {
+      showNextLevelButton();
+    } else {
+      showSubMenu();
+    }
   }
+}
+
+async function advanceToNextLevel() {
+  if (!isSurvivalMode || playerHP <= 0) {
+    return;
+  }
+
+  currentLevel += 1;
+  hideSurvivalOverlays();
+  clearOptimalRoute();
+  clearUserRoutes();
+  destroyMap();
+  resetGameState();
+  updateSurvivalHud();
+
+  await loadRandomSurvivalLevel();
+}
+
+function restartSurvivalGame() {
+  resetSurvivalProgress();
+  returnToMainMenu();
 }
 
 // ── Search (Practice) ───────────────────────────────────────────────────────
@@ -245,6 +402,10 @@ async function loadLevel(location) {
       name:  location.name,
       mode:  currentGameMode,
     });
+    if (isSurvivalMode) {
+      params.set("survival", "1");
+      params.set("level", String(currentLevel));
+    }
     const response = await fetch(`${API_BASE}/api/generate_level?${params}`);
 
     if (!response.ok) {
@@ -262,10 +423,17 @@ async function loadLevel(location) {
 
     renderMap(levelData);
     showGameControls(true);
+    hideSurvivalOverlays();
     updateGameHud();
+    if (isSurvivalMode) {
+      showSurvivalHud(true);
+      updateSurvivalHud();
+    }
     setStatus(getStageHint(), "success");
-    headerSubtitle.textContent =
-      `${currentGameMode === "linear" ? "Linear" : "Parallel"} — ${location.name}`;
+    if (!isSurvivalMode) {
+      headerSubtitle.textContent =
+        `${currentGameMode === "linear" ? "Linear" : "Parallel"} — ${location.name}`;
+    }
   } catch (err) {
     setStatus(`Failed to load level: ${err.message}`, "error");
     hideMap();
@@ -675,6 +843,9 @@ function showGameControls(visible) {
   evaluateBtn.classList.toggle("hidden", !visible);
   undoBtn.disabled = true;
   evaluateBtn.disabled = true;
+  if (!visible) {
+    nextLevelBtn.classList.add("hidden");
+  }
 }
 
 // ── Evaluation ──────────────────────────────────────────────────────────────
@@ -706,26 +877,58 @@ async function evaluateRoute() {
       throw new Error(data.error || `Server error: ${response.status}`);
     }
 
-    const userMin = totalTimeSec / 60;
+    const userSec = totalTimeSec;
     const optimalSec = data.matrix_duration_sec ?? data.duration_sec ?? 0;
+    const userMin = userSec / 60;
     const optimalMin = optimalSec / 60;
-    const deltaMin = Math.max(0, userMin - optimalMin);
+    const deltaSec = Math.max(0, userSec - optimalSec);
+    const deltaMin = deltaSec / 60;
 
     drawOptimalRoute(data.geometry);
 
-    const msg =
+    let hpLost = 0;
+    if (isSurvivalMode) {
+      hpLost = Math.ceil(deltaSec / 10);
+      playerHP = Math.max(0, playerHP - hpLost);
+      updateSurvivalHud();
+    }
+
+    let msg =
       `Your time: ${userMin.toFixed(1)} mins. ` +
       `Optimal time: ${optimalMin.toFixed(1)} mins. ` +
-      `You were ${deltaMin.toFixed(1)} mins slower!`;
+      `You were ${deltaSec.toFixed(0)} seconds slower.`;
+
+    if (isSurvivalMode) {
+      msg += ` HP lost: ${hpLost}. Remaining HP: ${Math.round(playerHP)}.`;
+    }
 
     alert(msg);
     scorePanel.textContent = msg;
     scorePanel.classList.remove("hidden");
     scorePanel.classList.add("success");
-    setStatus("Evaluation complete — green line is the optimal route.", "success");
+    setPlayStatus("Evaluation complete — green line is the optimal route.", "success");
+
+    if (isSurvivalMode) {
+      if (playerHP <= 0) {
+        showGameOverScreen(
+          `Game Over at Level ${currentLevel}. ` +
+          `You were ${deltaSec.toFixed(0)}s slower (−${hpLost} HP). HP reached 0.`,
+        );
+      } else {
+        showNextLevelButton();
+        setPlayStatus(
+          `Level ${currentLevel} complete! −${hpLost} HP. Click Next Level to continue.`,
+          "success",
+        );
+      }
+    }
   } catch (err) {
-    setStatus(`Evaluation failed: ${err.message}`, "error");
-    evaluateBtn.disabled = false;
+    setPlayStatus(`Evaluation failed: ${err.message}`, "error");
+    if (isSurvivalMode && playerHP > 0) {
+      evaluateBtn.disabled = false;
+    } else if (!isSurvivalMode) {
+      evaluateBtn.disabled = false;
+    }
   } finally {
     gameBusy = false;
   }
@@ -904,10 +1107,7 @@ function hideMap() {
 }
 
 function returnToLobby() {
-  hideMap();
-  hideGameplayUi();
-  currentGameMode = null;
-  initLobby();
+  returnToMainMenu();
 }
 
 // ── UI Helpers ─────────────────────────────────────────────────────────────
@@ -1007,13 +1207,10 @@ function escapeHtml(str) {
 btnParallelMode.addEventListener("click", () => selectGameMode("parallel"));
 btnLinearMode.addEventListener("click", () => selectGameMode("linear"));
 btnPractice.addEventListener("click", showPracticeSearch);
-btnRandom.addEventListener("click", startRandomMode);
-btnBackMenu.addEventListener("click", () => {
-  currentGameMode = null;
-  hideGameplayUi();
-  showLobby();
-  headerSubtitle.textContent = "Choose a game mode to begin";
-});
+btnRandom.addEventListener("click", () => startSurvivalMode(false));
+nextLevelBtn.addEventListener("click", advanceToNextLevel);
+restartGameBtn.addEventListener("click", restartSurvivalGame);
+btnBackMenu.addEventListener("click", returnToMainMenu);
 
 searchBtn.addEventListener("click", performSearch);
 searchInput.addEventListener("keydown", (e) => {

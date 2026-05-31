@@ -19,6 +19,11 @@
     <header class="app-header">
       <h1>🚚 Delivery Game</h1>
       <p id="header-subtitle" class="subtitle">Choose a game mode to begin</p>
+      <p id="survival-stats" class="survival-stats hidden" aria-live="polite">
+        <span id="hp-display">HP: 100</span>
+        <span class="survival-stats__sep">·</span>
+        <span id="level-display">Level: 1</span>
+      </p>
     </header>
 
     <!-- ── Game Lobby ────────────────────────────────────────────── -->
@@ -39,7 +44,7 @@
           Practice Mode (Custom Location)
         </button>
         <button id="btn-random" type="button" class="menu-btn menu-btn--random">
-          Random Mode
+          Endless Survival Mode
         </button>
         <button id="btn-back-menu" type="button" class="menu-btn menu-btn--back">
           ← Back
@@ -91,12 +96,40 @@
           <button id="evaluate-btn" type="button" class="hidden" disabled>
             Evaluate Route
           </button>
+          <button id="next-level-btn" type="button" class="hidden menu-btn menu-btn--random">
+            Next Level
+          </button>
         </div>
       </div>
       <div id="map" role="application" aria-label="Map of delivery POIs"></div>
     </section>
 
+    <!-- ── Game Over (Survival) ──────────────────────────────────── -->
+    <section id="game-over-panel" class="lobby-section hidden" aria-label="Game over">
+      <h2 class="menu-title">Game Over</h2>
+      <p id="game-over-message" class="game-time-label">
+        Your HP reached 0. Better luck next run!
+      </p>
+      <button id="restart-game-btn" type="button" class="menu-btn menu-btn--practice">
+        Restart Game
+      </button>
+    </section>
+
   </div>
+
+  <style>
+    .survival-stats {
+      margin-top: 0.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #f59e0b;
+    }
+    .survival-stats__sep { margin: 0 0.35rem; opacity: 0.7; }
+    #hp-display.low-hp { color: #ef4444; }
+    #next-level-btn { font-size: 0.85rem; padding: 0.55rem 1rem; }
+    #game-over-panel { text-align: center; }
+    #game-over-panel .game-time-label { margin: 0.75rem 0 1rem; }
+  </style>
 
   <script>
     const API_BASE = "";
