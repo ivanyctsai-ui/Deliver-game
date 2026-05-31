@@ -108,15 +108,18 @@ On error → `{"error": "message"}` with 4xx/502.
 ### `/api/route` → legacy single A→B route (not wired)
 Use `/api/solve_parallel` for parallel multi-choice routing.
 
-### `/api/generate_level` → `api_overpass.generate_level_pois()` + start from query
+### `/api/generate_level?mode=parallel|linear` → Overpass level data + start
+**parallel** (default):
 ```json
-{
-  "start":  {"id", "name", "lat", "lon", "role": "start"},
-  "stage1": [3 × {id, name, lat, lon, role: "stage1"}],
-  "stage2": [3 × {id, name, lat, lon, role: "stage2"}],
-  "end":    {id, name, lat, lon, "role": "end"}
-}
+{"mode":"parallel","start":{...},"stage1":[3],"stage2":[3],"end":{...}}
 ```
+**linear**:
+```json
+{"mode":"linear","start":{...},"pois":[5],"end":{...}}
+```
+
+### `/api/solve_linear` → `calculate_best_linear_route()` (5! TSP)
+POST `{"start", "pois": [5], "end"}` → same shape as solve_parallel plus `poi_order`.
 
 ### `/api/route_leg` → `api_osrm.get_route_geometry()` (one leg)
 POST `{"from": {lat, lon}, "to": {lat, lon}}` → `{geometry, duration_sec, duration_min}`.
@@ -162,7 +165,9 @@ All `/api/*` routes return `Content-Type: application/json`. Use `jsonify()` —
 | 1 | Project skeleton + Nominatim search UI | ✅ Complete |
 | 2 | Overpass POI fetching + `/api/generate_level` | ✅ Complete |
 | 3-A | OSRM matrix + parallel route solver (9 paths) | ✅ Complete |
-| 3-B | Playable click loop + undo + evaluate | ✅ Complete |
+| 3-B | Game lobby (Parallel / Linear, Practice / Random) | ✅ Complete |
+| 3-B | Playable click loop + undo + evaluate (both modes) | ✅ Complete |
+| 3-B | Linear TSP solver (`/api/solve_linear`) | ✅ Complete |
 | 3-A | Leaflet map + POI markers + route polylines | ✅ Complete |
 | 2 | OSRM simple A→B `/api/route` | ⏳ Not started |
 | 4 | Delivery mini-game logic | ⏳ Not started |

@@ -18,11 +18,37 @@
 
     <header class="app-header">
       <h1>🚚 Delivery Game</h1>
-      <p class="subtitle">Search for your delivery destination</p>
+      <p id="header-subtitle" class="subtitle">Choose a game mode to begin</p>
     </header>
 
-    <!-- ── Search Panel ──────────────────────────────────────────── -->
-    <section class="search-panel" aria-label="Location search">
+    <!-- ── Game Lobby ────────────────────────────────────────────── -->
+    <section id="lobby-section" class="lobby-section" aria-label="Game lobby">
+      <div id="menu-main" class="menu-panel">
+        <h2 class="menu-title">Select Game Mode</h2>
+        <button id="btn-parallel-mode" type="button" class="menu-btn menu-btn--parallel">
+          Parallel Mode
+        </button>
+        <button id="btn-linear-mode" type="button" class="menu-btn menu-btn--linear">
+          Linear Mode
+        </button>
+      </div>
+
+      <div id="menu-sub" class="menu-panel hidden">
+        <h2 id="menu-sub-title" class="menu-title">Choose Setup</h2>
+        <button id="btn-practice" type="button" class="menu-btn menu-btn--practice">
+          Practice Mode (Custom Location)
+        </button>
+        <button id="btn-random" type="button" class="menu-btn menu-btn--random">
+          Random Mode
+        </button>
+        <button id="btn-back-menu" type="button" class="menu-btn menu-btn--back">
+          ← Back
+        </button>
+      </div>
+    </section>
+
+    <!-- ── Search Panel (Practice only) ──────────────────────────── -->
+    <section id="search-section" class="search-panel hidden" aria-label="Location search">
       <div class="search-row">
         <input
           id="search-input"
@@ -38,8 +64,8 @@
       <p id="search-status" class="status-msg" aria-live="polite"></p>
     </section>
 
-    <!-- ── Results List ──────────────────────────────────────────── -->
-    <section class="results-panel" aria-label="Search results">
+    <!-- ── Results List (Practice search) ───────────────────────── -->
+    <section id="results-panel" class="results-panel hidden" aria-label="Search results">
       <ul id="results-list" class="results-list" role="list"></ul>
     </section>
 
@@ -50,11 +76,11 @@
       <p id="selected-coords" class="selected-coords"></p>
     </section>
 
-    <!-- ── Leaflet Map (shown after location selection) ──────────── -->
+    <!-- ── Leaflet Map ───────────────────────────────────────────── -->
     <section id="map-section" class="map-section hidden" aria-label="Delivery map">
       <div class="map-toolbar">
         <div class="map-hud">
-          <p id="game-stage-label" class="game-stage-label">Select a location to begin.</p>
+          <p id="game-stage-label" class="game-stage-label"></p>
           <p id="game-time-label" class="game-time-label"></p>
           <p id="score-panel" class="score-panel hidden" aria-live="polite"></p>
         </div>
@@ -72,11 +98,6 @@
 
   </div>
 
-  <!--
-    ARCHITECTURAL RULE (see CLAUDE.md §6):
-    No business logic here. Config constants only (≤5 lines).
-    All logic lives in game.js.
-  -->
   <script>
     const API_BASE = "";
   </script>

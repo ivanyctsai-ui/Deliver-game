@@ -63,6 +63,82 @@ body {
   font-size: 0.95rem;
 }
 
+/* ── Game Lobby ──────────────────────────────────────────────────── */
+
+.lobby-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+}
+
+.menu-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.menu-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  color: var(--text-muted);
+}
+
+.menu-btn {
+  width: 100%;
+  border: none;
+  border-radius: var(--radius);
+  color: #0f172a;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.9rem 1.25rem;
+  text-align: left;
+  transition: transform 0.1s, filter 0.2s;
+}
+
+.menu-btn:hover {
+  filter: brightness(1.08);
+}
+
+.menu-btn:active {
+  transform: scale(0.98);
+}
+
+.menu-btn--parallel {
+  background: linear-gradient(135deg, #f97316, #f59e0b);
+}
+
+.menu-btn--linear {
+  background: linear-gradient(135deg, #a855f7, #6366f1);
+  color: #fff;
+}
+
+.menu-btn--practice {
+  background: var(--accent);
+}
+
+.menu-btn--random {
+  background: #38bdf8;
+  color: #0f172a;
+}
+
+.menu-btn--back {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.menu-btn--back:hover {
+  background: var(--surface-alt);
+  filter: none;
+}
+
 /* ── Search Panel ────────────────────────────────────────────────── */
 
 .search-panel {
@@ -142,8 +218,8 @@ body {
   list-style: none;
 }
 
-.results-list:empty {
-  display: none;
+.results-panel:not(.hidden) .results-list {
+  display: block;
 }
 
 .result-item {
@@ -310,10 +386,16 @@ body {
   background: var(--bg);
 }
 
-/* Leaflet marker pins (divIcon) */
+/* Leaflet marker pins (divIcon) — allow clicks to reach the marker */
 .leaflet-marker-icon.marker-pin {
   background: transparent;
   border: none;
+  pointer-events: auto;
+}
+
+.marker-pin,
+.marker-pin * {
+  pointer-events: none;
 }
 
 .marker-pin__dot {
@@ -336,8 +418,17 @@ body {
   background: #a855f7;
 }
 
+.marker-pin__dot--stop {
+  background: #14b8a6;
+}
+
 .marker-pin__dot--end {
   background: #171717;
+}
+
+.marker-pin--visited .marker-pin__dot {
+  opacity: 0.45;
+  box-shadow: none;
 }
 
 .marker-pin__dot--poi {
@@ -353,11 +444,6 @@ body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
   margin-top: 2px;
   white-space: nowrap;
-}
-
-.marker-pin--visited .marker-pin__dot {
-  opacity: 0.45;
-  box-shadow: none;
 }
 
 /* ── Utilities ───────────────────────────────────────────────────── */

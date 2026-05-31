@@ -19,6 +19,7 @@ _TIMEOUT   = 3  # seconds — hard limit, never increase
 
 _STAGE1_COUNT = 3
 _STAGE2_COUNT = 3
+_LINEAR_STOP_COUNT = 5
 
 
 def fetch_random_pois(
@@ -95,6 +96,53 @@ def generate_level_pois(
     }
 
 
+def generate_linear_level_pois(
+    lat: float,
+    lon: float,
+    radius: int = 1000,
+) -> dict:
+    """
+    Build POIs for a 7-point linear TSP level (start supplied by caller).
+
+    Returns:
+        {
+            "pois": [5 × {id, name, lat, lon, role: "stop"}],
+            "end":  {id, name, lat, lon, role: "end"},
+        }
+    """
+    try:
+        center_lat = float(lat)
+        center_lon = float(lon)
+    except (TypeError, ValueError):
+        return _empty_linear_payload(0.0, 0.0, radius)
+
+    raw_elements = _query_overpass(center_lat, center_lon, radius)
+    pool = _normalise(raw_elements)
+    random.shuffle(pool)
+
+    needed = _LINEAR_STOP_COUNT + 1
+    pool = _pad_to_count(pool, center_lat, center_lon, needed, radius)
+
+    stops = [_tag_role(p, "stop", i) for i, p in enumerate(pool[:_LINEAR_STOP_COUNT])]
+    end_point = _tag_role(
+        {
+            **pool[_LINEAR_STOP_COUNT],
+            "name": pool[_LINEAR_STOP_COUNT].get("name") or "Delivery End",
+        },
+        "end",
+        0,
+    )
+
+    return {"pois": stops, "end": end_point}
+
+
+def _empty_linear_payload(center_lat: float, center_lon: float, radius: int) -> dict:
+    pool = _pad_to_count([], center_lat, center_lon, _LINEAR_STOP_COUNT + 1, radius)
+    stops = [_tag_role(p, "stop", i) for i, p in enumerate(pool[:_LINEAR_STOP_COUNT])]
+    end_point = _tag_role(synthetic_end_point(center_lat, center_lon, float(radius)), "end", 0)
+    return {"pois": stops, "end": end_point}
+
+
 def _empty_level_payload(center_lat: float, center_lon: float, radius: int) -> dict:
     """Fallback when coordinates are invalid — still returns the correct shape."""
     pool = _pad_to_count([], center_lat, center_lon, _STAGE1_COUNT + _STAGE2_COUNT + 1, radius)
@@ -111,6 +159,8 @@ def _tag_role(poi: dict, role: str, index: int) -> dict:
         label = f"Stage 1 — {name}"
     elif role == "stage2":
         label = f"Stage 2 — {name}"
+    elif role == "stop":
+        label = f"Stop {index + 1} — {name}"
     else:
         label = name if "end" in name.lower() or "delivery" in name.lower() else f"Delivery End — {name}"
 

@@ -12,9 +12,12 @@ from flask import Flask, jsonify, render_template, request
 
 from api_nominatim import search_locations
 from api_osrm import get_distance_matrix, get_route_geometry
-from api_overpass import generate_level_pois
+from api_overpass import generate_level_pois, generate_linear_level_pois
 from game_logic import (
+    apply_coordinate_jitter,
+    build_linear_coord_order,
     build_parallel_coord_order,
+    calculate_best_linear_route,
     calculate_best_parallel_route,
 )
 
@@ -29,6 +32,37 @@ PORT  = 5000
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+def _jitter_level_split(
+    start: dict,
+    poi_groups: list[list[dict]],
+    end: dict,
+) -> tuple[dict, list[list[dict]], dict]:
+    """
+    Combine start + POI groups + end, jitter collisions, then split again.
+
+    Start (index 0) stays fixed; overlapping middle/end points are nudged.
+    """
+    sizes = [len(group) for group in poi_groups]
+    middle: list[dict] = []
+    for group in poi_groups:
+        middle.extend(group)
+
+    combined = [start, *middle, end]
+    jittered = apply_coordinate_jitter(combined)
+
+    start_j = jittered[0]
+    end_j = jittered[-1]
+    middle_j = jittered[1:-1]
+
+    groups_j: list[list[dict]] = []
+    offset = 0
+    for size in sizes:
+        groups_j.append(middle_j[offset : offset + size])
+        offset += size
+
+    return start_j, groups_j, end_j
 
 
 # ── API Routes ────────────────────────────────────────────────────────────────
@@ -68,11 +102,15 @@ def api_generate_level():
     """
     GET /api/generate_level?lat=<float>&lon=<float>&name=<start name>
 
-    Returns 8-point level JSON: start + 3 stage1 + 3 stage2 + end.
+    Query param mode: "parallel" (default) or "linear".
+
+    Parallel → 8 points (start + 3 stage1 + 3 stage2 + end).
+    Linear   → 7 points (start + 5 stops + end).
     """
     lat_raw = request.args.get("lat", "").strip()
     lon_raw = request.args.get("lon", "").strip()
     start_name = request.args.get("name", "Start").strip() or "Start"
+    mode = request.args.get("mode", "parallel").strip().lower()
 
     if not lat_raw or not lon_raw:
         return jsonify({"error": "Missing required parameters: lat and lon"}), 400
@@ -86,18 +124,40 @@ def api_generate_level():
     if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
         return jsonify({"error": "lat/lon out of valid range"}), 400
 
+    start = {
+        "id":   "start",
+        "name": start_name,
+        "lat":  lat,
+        "lon":  lon,
+        "role": "start",
+    }
+
+    if mode == "linear":
+        linear_pois = generate_linear_level_pois(lat, lon)
+        start_j, linear_groups_j, end_j = _jitter_level_split(
+            start,
+            [linear_pois["pois"]],
+            linear_pois["end"],
+        )
+        return jsonify({
+            "mode":  "linear",
+            "start": start_j,
+            "pois":  linear_groups_j[0],
+            "end":   end_j,
+        })
+
     level_pois = generate_level_pois(lat, lon)
+    start_j, groups_j, end_j = _jitter_level_split(
+        start,
+        [level_pois["stage1"], level_pois["stage2"]],
+        level_pois["end"],
+    )
     return jsonify({
-        "start": {
-            "id":   "start",
-            "name": start_name,
-            "lat":  lat,
-            "lon":  lon,
-            "role": "start",
-        },
-        "stage1": level_pois["stage1"],
-        "stage2": level_pois["stage2"],
-        "end":    level_pois["end"],
+        "mode":   "parallel",
+        "start":  start_j,
+        "stage1": groups_j[0],
+        "stage2": groups_j[1],
+        "end":    end_j,
     })
 
 
@@ -198,6 +258,62 @@ def api_solve_parallel():
         "path_indices":          best["path_indices"],
         "stage1_poi_index":      best["stage1_poi_index"],
         "stage2_poi_index":      best["stage2_poi_index"],
+        "matrix_duration_sec":   best["total_duration_sec"],
+        "optimal_duration_min":  round(best["total_duration_sec"] / 60.0, 1),
+    })
+
+
+@app.route("/api/solve_linear", methods=["POST"])
+def api_solve_linear():
+    """
+    POST /api/solve_linear
+    JSON: {"start", "pois": [5], "end"}
+
+    Optimal linear TSP (120 permutations); returns full route geometry.
+    """
+    data = request.get_json(silent=True) or {}
+    start = data.get("start")
+    pois = data.get("pois")
+    end = data.get("end")
+
+    if not start or not end:
+        return jsonify({"error": "Body must include start and end"}), 400
+    if not isinstance(pois, list) or len(pois) != 5:
+        return jsonify({"error": "pois must contain exactly 5 POIs"}), 400
+
+    try:
+        start_coord = {"lat": float(start["lat"]), "lon": float(start["lon"])}
+        end_coord = {"lat": float(end["lat"]), "lon": float(end["lon"])}
+        poi_coords = [
+            {"lat": float(p["lat"]), "lon": float(p["lon"])} for p in pois
+        ]
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "All points require numeric lat/lon"}), 400
+
+    matrix_coords = build_linear_coord_order(start_coord, poi_coords, end_coord)
+    duration_matrix = get_distance_matrix(matrix_coords)
+    if duration_matrix is None:
+        return jsonify({"error": "OSRM distance matrix unavailable"}), 502
+
+    best = calculate_best_linear_route(
+        start_coord,
+        poi_coords,
+        duration_matrix,
+        end_coord,
+    )
+    if best is None:
+        return jsonify({"error": "Could not compute best linear route"}), 502
+
+    route_data = get_route_geometry(best["waypoints"])
+    if route_data is None:
+        return jsonify({"error": "OSRM route geometry unavailable"}), 502
+
+    return jsonify({
+        "geometry":              route_data["geometry"],
+        "duration_sec":          route_data["duration_sec"],
+        "duration_min":          round(route_data["duration_sec"] / 60.0, 1),
+        "path_indices":          best["path_indices"],
+        "poi_order":             best["poi_order"],
         "matrix_duration_sec":   best["total_duration_sec"],
         "optimal_duration_min":  round(best["total_duration_sec"] / 60.0, 1),
     })

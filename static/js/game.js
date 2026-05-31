@@ -1,5 +1,5 @@
 /**
- * game.js — Delivery Game Frontend (Playable Parallel Mode)
+ * game.js — Delivery Game (Lobby + Parallel + Linear modes)
  *
  * ARCHITECTURAL RULE (see CLAUDE.md §6):
  *   All JavaScript lives here. Guard coordinates with ?? fallback.
@@ -9,30 +9,55 @@
 
 // ── DOM References ─────────────────────────────────────────────────────────
 
-const container        = document.querySelector(".container");
-const searchInput      = document.getElementById("search-input");
-const searchBtn        = document.getElementById("search-btn");
-const statusMsg        = document.getElementById("search-status");
-const resultsPanel     = document.querySelector(".results-panel");
-const resultsList      = document.getElementById("results-list");
-const selectedPanel    = document.getElementById("selected-panel");
-const selectedName     = document.getElementById("selected-name");
-const selectedCoords   = document.getElementById("selected-coords");
-const mapSection       = document.getElementById("map-section");
-const mapEl            = document.getElementById("map");
-const gameStageLabel   = document.getElementById("game-stage-label");
-const gameTimeLabel    = document.getElementById("game-time-label");
-const scorePanel       = document.getElementById("score-panel");
-const undoBtn          = document.getElementById("undo-btn");
-const evaluateBtn      = document.getElementById("evaluate-btn");
+const container       = document.querySelector(".container");
+const headerSubtitle  = document.getElementById("header-subtitle");
+const lobbySection    = document.getElementById("lobby-section");
+const menuMain        = document.getElementById("menu-main");
+const menuSub         = document.getElementById("menu-sub");
+const menuSubTitle    = document.getElementById("menu-sub-title");
+const btnParallelMode = document.getElementById("btn-parallel-mode");
+const btnLinearMode   = document.getElementById("btn-linear-mode");
+const btnPractice     = document.getElementById("btn-practice");
+const btnRandom       = document.getElementById("btn-random");
+const btnBackMenu     = document.getElementById("btn-back-menu");
+const searchSection   = document.getElementById("search-section");
+const searchInput     = document.getElementById("search-input");
+const searchBtn       = document.getElementById("search-btn");
+const statusMsg       = document.getElementById("search-status");
+const resultsPanel    = document.getElementById("results-panel");
+const resultsList     = document.getElementById("results-list");
+const selectedPanel   = document.getElementById("selected-panel");
+const selectedName    = document.getElementById("selected-name");
+const selectedCoords  = document.getElementById("selected-coords");
+const mapSection      = document.getElementById("map-section");
+const mapEl           = document.getElementById("map");
+const gameStageLabel  = document.getElementById("game-stage-label");
+const gameTimeLabel   = document.getElementById("game-time-label");
+const scorePanel      = document.getElementById("score-panel");
+const undoBtn         = document.getElementById("undo-btn");
+const evaluateBtn     = document.getElementById("evaluate-btn");
+
+// ── Constants ───────────────────────────────────────────────────────────────
+
+const RANDOM_CITIES = ["Taipei", "Tokyo", "New York", "London"];
 
 // ── Game State ─────────────────────────────────────────────────────────────
 
-/** @type {{ start: object, stage1: object[], stage2: object[], end: object } | null} */
+/** @type {null | 'parallel' | 'linear'} */
+let currentGameMode = null;
+
+/** Parallel: {start, stage1, stage2, end}. Linear: {start, pois, end}. */
 let levelData = null;
 
-/** 1 = pick stage1, 2 = pick stage2, 3 = pick end, 4 = finished */
+/** Parallel: 1 = Stage1, 2 = Stage2, 3 = End, 4 = finished */
 let currentStage = 1;
+
+/** Linear: stops visited in any order (max 5) */
+/** @type {Array<object>} */
+let visitedStops = [];
+
+/** Linear: true after the End point is clicked */
+let linearGameComplete = false;
 
 /** @type {Array<{stage: number, poi: object, durationSec: number, polyline: L.Polyline, from: object, to: object}>} */
 let pathHistory = [];
@@ -55,7 +80,102 @@ let userRouteLayerGroup = null;
 /** @type {L.Polyline | null} */
 let optimalRouteLayer = null;
 
-// ── Search ─────────────────────────────────────────────────────────────────
+// ── Lobby ───────────────────────────────────────────────────────────────────
+
+function initLobby() {
+  currentGameMode = null;
+  showLobby();
+  hideGameplayUi();
+  headerSubtitle.textContent = "Choose a game mode to begin";
+}
+
+function showLobby() {
+  lobbySection.classList.remove("hidden");
+  menuMain.classList.remove("hidden");
+  menuSub.classList.add("hidden");
+}
+
+function showSubMenu() {
+  lobbySection.classList.remove("hidden");
+  menuMain.classList.add("hidden");
+  menuSub.classList.remove("hidden");
+  const modeLabel = currentGameMode === "linear" ? "Linear" : "Parallel";
+  menuSubTitle.textContent = `${modeLabel} Mode — Choose Setup`;
+}
+
+function hideLobby() {
+  lobbySection.classList.add("hidden");
+}
+
+function hideGameplayUi() {
+  searchSection.classList.add("hidden");
+  resultsPanel.classList.add("hidden");
+  selectedPanel.classList.add("hidden");
+  mapSection.classList.add("hidden");
+  container.classList.remove("has-map");
+  clearResults();
+  showGameControls(false);
+}
+
+function showPracticeSearch() {
+  hideLobby();
+  searchSection.classList.remove("hidden");
+  searchInput.value = "";
+  clearResults();
+  setStatus("Search for your practice start location.", "");
+  headerSubtitle.textContent =
+    `${currentGameMode === "linear" ? "Linear" : "Parallel"} — Practice Mode`;
+}
+
+function selectGameMode(mode) {
+  currentGameMode = mode;
+  showSubMenu();
+}
+
+async function startRandomMode() {
+  if (!currentGameMode) {
+    return;
+  }
+
+  hideLobby();
+  hideGameplayUi();
+  const city = RANDOM_CITIES[Math.floor(Math.random() * RANDOM_CITIES.length)];
+  setStatus(`Loading random city: ${city}…`, "");
+
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/search?q=${encodeURIComponent(city)}&limit=1`,
+    );
+
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
+    }
+
+    const results = await response.json();
+
+    if (!Array.isArray(results) || results.length === 0) {
+      throw new Error(`No results for ${city}.`);
+    }
+
+    const lat = results[0].lat ?? results[0].latitude;
+    const lon = results[0].lon ?? results[0].longitude ?? results[0].lng;
+
+    if (lat == null || lon == null) {
+      throw new Error("Random city result missing coordinates.");
+    }
+
+    await loadLevel({
+      name: results[0].name || city,
+      lat,
+      lon,
+    });
+  } catch (err) {
+    setStatus(`Random mode failed: ${err.message}`, "error");
+    showSubMenu();
+  }
+}
+
+// ── Search (Practice) ───────────────────────────────────────────────────────
 
 async function performSearch() {
   const query = searchInput.value.trim();
@@ -66,8 +186,6 @@ async function performSearch() {
 
   setLoading(true);
   clearResults();
-  hideMap();
-  selectedPanel.classList.add("hidden");
   setStatus("Searching…", "");
 
   try {
@@ -84,7 +202,6 @@ async function performSearch() {
       throw new Error("Unexpected response format from server.");
     }
 
-    resultsPanel.classList.remove("hidden");
     renderResults(results);
 
     if (results.length === 0) {
@@ -100,52 +217,21 @@ async function performSearch() {
   }
 }
 
-function renderResults(results) {
-  clearResults();
-
-  results.forEach((poi, index) => {
-    const lat = poi.lat ?? poi.latitude;
-    const lon = poi.lon ?? poi.longitude ?? poi.lng;
-
-    if (lat == null || lon == null) {
-      console.warn(`[game.js] Skipping result #${index} — missing coordinates:`, poi);
-      return;
-    }
-
-    const li = document.createElement("li");
-    li.className = "result-item";
-    li.setAttribute("role", "listitem");
-    li.setAttribute("tabindex", "0");
-    li.setAttribute("aria-label", poi.name);
-
-    li.innerHTML = `
-      <span class="result-name">${escapeHtml(poi.name)}</span>
-      <span class="result-coords">${lat.toFixed(5)}, ${lon.toFixed(5)}</span>
-    `;
-
-    li.addEventListener("click", () => selectLocation({ name: poi.name, lat, lon }));
-    li.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        selectLocation({ name: poi.name, lat, lon });
-      }
-    });
-
-    resultsList.appendChild(li);
-  });
-}
-
 // ── Level Load ──────────────────────────────────────────────────────────────
 
-async function selectLocation(location) {
+async function loadLevel(location) {
+  if (!currentGameMode) {
+    return;
+  }
+
   resetGameState();
+  hideLobby();
+  searchSection.classList.add("hidden");
+  resultsPanel.classList.add("hidden");
 
   selectedPanel.classList.remove("hidden");
   selectedName.textContent = location.name;
   selectedCoords.textContent = `${location.lat.toFixed(6)}, ${location.lon.toFixed(6)}`;
-
-  clearResults();
-  resultsPanel.classList.add("hidden");
 
   setStatus("Generating delivery level…", "");
   mapSection.classList.remove("hidden");
@@ -154,9 +240,10 @@ async function selectLocation(location) {
 
   try {
     const params = new URLSearchParams({
-      lat:  String(location.lat),
-      lon:  String(location.lon),
-      name: location.name,
+      lat:   String(location.lat),
+      lon:   String(location.lon),
+      name:  location.name,
+      mode:  currentGameMode,
     });
     const response = await fetch(`${API_BASE}/api/generate_level?${params}`);
 
@@ -166,36 +253,59 @@ async function selectLocation(location) {
     }
 
     const level = await response.json();
+    levelData = parseLevelResponse(level);
 
-    if (!level.start || !level.stage1 || !level.stage2 || !level.end) {
-      throw new Error("Invalid level data from server.");
-    }
-
-    levelData = {
-      start:  normalisePoint(level.start, "start"),
-      stage1: level.stage1.map((p, i) => normalisePoint(p, "stage1", i)),
-      stage2: level.stage2.map((p, i) => normalisePoint(p, "stage2", i)),
-      end:    normalisePoint(level.end, "end"),
-    };
-
-    lastPoint = { lat: levelData.start.lat, lon: levelData.start.lon };
+    lastPoint = coordPayload(levelData.start);
     currentStage = 1;
+    visitedStops = [];
+    linearGameComplete = false;
 
     renderMap(levelData);
     showGameControls(true);
     updateGameHud();
-    setStatus("Click an orange Stage 1 stop to begin your route.", "success");
+    setStatus(getStageHint(), "success");
+    headerSubtitle.textContent =
+      `${currentGameMode === "linear" ? "Linear" : "Parallel"} — ${location.name}`;
   } catch (err) {
     setStatus(`Failed to load level: ${err.message}`, "error");
     hideMap();
+    showLobby();
   }
 }
 
 /**
- * @param {object} poi
- * @param {string} role
- * @param {number} [index]
+ * @param {object} level
  */
+function parseLevelResponse(level) {
+  if (!level.start) {
+    throw new Error("Invalid level data from server.");
+  }
+
+  const start = normalisePoint(level.start, "start");
+
+  if (currentGameMode === "linear") {
+    if (!Array.isArray(level.pois) || level.pois.length !== 5 || !level.end) {
+      throw new Error("Invalid linear level data from server.");
+    }
+    return {
+      start,
+      pois: level.pois.map((p, i) => normalisePoint(p, "stop", i)),
+      end:  normalisePoint(level.end, "end"),
+    };
+  }
+
+  if (!level.stage1 || !level.stage2 || !level.end) {
+    throw new Error("Invalid parallel level data from server.");
+  }
+
+  return {
+    start:  start,
+    stage1: level.stage1.map((p, i) => normalisePoint(p, "stage1", i)),
+    stage2: level.stage2.map((p, i) => normalisePoint(p, "stage2", i)),
+    end:    normalisePoint(level.end, "end"),
+  };
+}
+
 function normalisePoint(poi, role, index = 0) {
   const lat = poi.lat ?? poi.latitude;
   const lon = poi.lon ?? poi.longitude ?? poi.lng;
@@ -211,10 +321,39 @@ function normalisePoint(poi, role, index = 0) {
   };
 }
 
+/**
+ * Plain {lat, lon} for API payloads — never pass Leaflet objects to JSON.stringify.
+ * @param {object} point
+ * @returns {{ lat: number, lon: number }}
+ */
+function coordPayload(point) {
+  const lat = point?.lat ?? point?.latitude;
+  const lon = point?.lon ?? point?.longitude ?? point?.lng;
+  return { lat: Number(lat), lon: Number(lon) };
+}
+
+/**
+ * Copy POI fields only (strips _marker and other Leaflet references).
+ * @param {object} poi
+ * @returns {{ id: string, name: string, lat: number, lon: number, role: string }}
+ */
+function cleanPoiData(poi) {
+  const { lat, lon } = coordPayload(poi);
+  return {
+    id:   poi.id,
+    name: poi.name,
+    lat,
+    lon,
+    role: poi.role,
+  };
+}
+
 function resetGameState() {
   levelData = null;
   currentStage = 1;
   pathHistory = [];
+  visitedStops = [];
+  linearGameComplete = false;
   lastPoint = null;
   totalTimeSec = 0;
   gameBusy = false;
@@ -223,17 +362,39 @@ function resetGameState() {
   scorePanel.classList.remove("success");
 }
 
+function isParallelMode() {
+  return currentGameMode === "parallel";
+}
+
+function isGameFinished() {
+  return isParallelMode() ? currentStage === 4 : linearGameComplete;
+}
+
+function isStopVisited(poiId) {
+  return visitedStops.some((s) => s.id === poiId);
+}
+
 // ── Playable Game Loop ──────────────────────────────────────────────────────
 
 /**
  * @param {object} poi
- * @param {"stage1" | "stage2" | "end"} role
+ * @param {string} role
  */
 async function handlePoiClick(poi, role) {
-  if (!levelData || gameBusy || currentStage > 3) {
+  if (!levelData || gameBusy || isGameFinished()) {
     return;
   }
 
+  if (isParallelMode()) {
+    await handleParallelPoiClick(poi, role);
+    return;
+  }
+
+  await handleLinearPoiClick(poi, role);
+}
+
+/** @param {object} poi @param {"stage1" | "stage2" | "end"} role */
+async function handleParallelPoiClick(poi, role) {
   if (role === "stage2" && currentStage === 1) {
     alert("You must select a Stage 1 location first!");
     return;
@@ -259,42 +420,104 @@ async function handlePoiClick(poi, role) {
     return;
   }
 
-  gameBusy = true;
-  setStatus("Calculating route…", "");
+  const stageAtClick = currentStage;
 
-  try {
-    const leg = await fetchRouteLeg(lastPoint, poi);
-    addRouteLeg(leg.geometry, leg.duration_sec, currentStage, poi);
-
-    totalTimeSec += leg.duration_sec;
-    lastPoint = { lat: poi.lat, lon: poi.lon };
-
-    if (currentStage === 3) {
+  await commitRouteLeg(poi, stageAtClick, () => {
+    if (stageAtClick === 3) {
       currentStage = 4;
       evaluateBtn.disabled = false;
-      setStatus("Route complete! Click Evaluate Route to compare with optimal.", "success");
+      setPlayStatus("Route complete! Click Evaluate Route to compare with optimal.", "success");
     } else {
-      currentStage += 1;
-      setStatus(getStageHint(), "success");
+      currentStage = stageAtClick + 1;
+      setPlayStatus(getStageHint(), "success");
+    }
+  });
+}
+
+/** @param {object} poi @param {"stop" | "end"} role */
+async function handleLinearPoiClick(poi, role) {
+  if (role === "stop") {
+    if (visitedStops.length >= 5) {
+      alert("You already visited all 5 stops. Click the End point!");
+      return;
+    }
+    if (isStopVisited(poi.id)) {
+      alert("You already visited this stop!");
+      return;
     }
 
+    const poiData = cleanPoiData(poi);
+
+    await commitRouteLeg(poiData, visitedStops.length + 1, () => {
+      visitedStops.push(poiData);
+      refreshStopMarkerStyle(poiData.id);
+      if (visitedStops.length === 5) {
+        setPlayStatus("All stops visited! Click the black End point.", "success");
+      } else {
+        setPlayStatus(getStageHint(), "success");
+      }
+    });
+    return;
+  }
+
+  if (role === "end") {
+    if (visitedStops.length < 5) {
+      alert(`Visit all 5 stops first! (${visitedStops.length}/5 done)`);
+      return;
+    }
+
+    await commitRouteLeg(poi, 6, () => {
+      linearGameComplete = true;
+      evaluateBtn.disabled = false;
+      setPlayStatus("Route complete! Click Evaluate Route to compare with optimal.", "success");
+    });
+  }
+}
+
+/**
+ * @param {object} poi
+ * @param {number} stage
+ * @param {() => void} onSuccess
+ */
+async function commitRouteLeg(poi, stage, onSuccess) {
+  if (!lastPoint) {
+    setStatus("Route error: no active position.", "error");
+    return;
+  }
+
+  gameBusy = true;
+  setPlayStatus("Calculating route…", "");
+
+  const fromCoord = coordPayload(lastPoint);
+  const toCoord = coordPayload(poi);
+  const poiRecord = cleanPoiData(poi);
+
+  try {
+    const leg = await fetchRouteLeg(fromCoord, toCoord);
+    addRouteLeg(leg.geometry, leg.duration_sec, stage, poiRecord, fromCoord, toCoord);
+
+    totalTimeSec += leg.duration_sec;
+    lastPoint = toCoord;
+
+    onSuccess();
     updateGameHud();
   } catch (err) {
-    setStatus(`Route failed: ${err.message}`, "error");
+    setPlayStatus(`Route failed: ${err.message}`, "error");
   } finally {
     gameBusy = false;
   }
 }
 
-/**
- * @param {{ lat: number, lon: number }} from
- * @param {{ lat: number, lon: number }} to
- */
 async function fetchRouteLeg(from, to) {
+  const payload = {
+    from: coordPayload(from),
+    to:   coordPayload(to),
+  };
+
   const response = await fetch(`${API_BASE}/api/route_leg`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ from, to }),
+    body:    JSON.stringify(payload),
   });
 
   const data = await response.json().catch(() => ({}));
@@ -313,19 +536,10 @@ async function fetchRouteLeg(from, to) {
   };
 }
 
-/**
- * @param {Array<[number, number]>} geometry
- * @param {number} durationSec
- * @param {number} stage
- * @param {object} poi
- */
-function addRouteLeg(geometry, durationSec, stage, poi) {
+function addRouteLeg(geometry, durationSec, stage, poi, fromCoord, toCoord) {
   if (!mapInstance || !userRouteLayerGroup) {
     return;
   }
-
-  const from = { ...lastPoint };
-  const to = { lat: poi.lat, lon: poi.lon };
 
   const polyline = L.polyline(geometry, {
     color:    "#3b82f6",
@@ -339,8 +553,8 @@ function addRouteLeg(geometry, durationSec, stage, poi) {
     poi,
     durationSec,
     polyline,
-    from,
-    to,
+    from: coordPayload(fromCoord),
+    to:   coordPayload(toCoord),
   });
 
   undoBtn.disabled = false;
@@ -355,42 +569,100 @@ function undoLastStep() {
   userRouteLayerGroup.removeLayer(last.polyline);
   totalTimeSec = Math.max(0, totalTimeSec - last.durationSec);
 
-  if (pathHistory.length === 0) {
-    lastPoint = {
-      lat: levelData.start.lat,
-      lon: levelData.start.lon,
-    };
-    currentStage = 1;
-    evaluateBtn.disabled = true;
+  if (isParallelMode()) {
+    undoParallelStep(last);
   } else {
-    const prev = pathHistory[pathHistory.length - 1];
-    lastPoint = { lat: prev.to.lat, lon: prev.to.lon };
-    currentStage = last.stage + 1;
-    evaluateBtn.disabled = true;
+    undoLinearStep(last);
   }
 
   scorePanel.classList.add("hidden");
   clearOptimalRoute();
+  evaluateBtn.disabled = true;
   undoBtn.disabled = pathHistory.length === 0;
   updateGameHud();
   setStatus(getStageHint(), "");
 }
 
+function undoParallelStep(last) {
+  if (pathHistory.length === 0) {
+    lastPoint = coordPayload(levelData.start);
+    currentStage = 1;
+  } else {
+    const prev = pathHistory[pathHistory.length - 1];
+    lastPoint = coordPayload(prev.to);
+    currentStage = prev.stage + 1;
+  }
+}
+
+/**
+ * Resolve the map POI (with Leaflet marker ref) by id — never use API payload objects.
+ * @param {object|string} poiOrId
+ */
+function findMapPoi(poiOrId) {
+  if (!levelData) {
+    return null;
+  }
+  const id = typeof poiOrId === "string" ? poiOrId : poiOrId.id;
+  if (levelData.pois) {
+    return levelData.pois.find((p) => p.id === id) || null;
+  }
+  const all = [
+    ...(levelData.stage1 || []),
+    ...(levelData.stage2 || []),
+    levelData.end,
+  ].filter(Boolean);
+  return all.find((p) => p.id === id) || null;
+}
+
+function refreshStopMarkerStyle(poiRef) {
+  const poi = findMapPoi(poiRef);
+  if (!poi?._marker || !levelData?.pois) {
+    return;
+  }
+  const idx = levelData.pois.findIndex((p) => p.id === poi.id);
+  const label = idx >= 0 ? `P${idx + 1}` : "P";
+  poi._marker.setIcon(createPinIcon("stop", label, isStopVisited(poi.id)));
+}
+
+function undoLinearStep(last) {
+  linearGameComplete = false;
+
+  if (last.poi.role === "stop") {
+    visitedStops = visitedStops.filter((s) => s.id !== last.poi.id);
+    refreshStopMarkerStyle(last.poi);
+  }
+
+  if (pathHistory.length === 0) {
+    lastPoint = coordPayload(levelData.start);
+    visitedStops = [];
+  } else {
+    const prev = pathHistory[pathHistory.length - 1];
+    lastPoint = coordPayload(prev.to);
+  }
+}
+
 function getStageHint() {
-  if (currentStage === 1) {
-    return "Click an orange Stage 1 stop.";
+  if (isParallelMode()) {
+    if (currentStage === 1) return "Click an orange Stage 1 stop.";
+    if (currentStage === 2) return "Click a purple Stage 2 stop.";
+    if (currentStage === 3) return "Click the black End point.";
+    return "Route complete — evaluate when ready.";
   }
-  if (currentStage === 2) {
-    return "Click a purple Stage 2 stop.";
+
+  if (visitedStops.length < 5) {
+    return `Click a teal stop (${visitedStops.length}/5 visited). Any order is fine.`;
   }
-  if (currentStage === 3) {
+  if (!linearGameComplete) {
     return "Click the black End point.";
   }
   return "Route complete — evaluate when ready.";
 }
 
 function updateGameHud() {
-  gameStageLabel.textContent = getStageHint();
+  if (!gameBusy) {
+    gameStageLabel.textContent = getStageHint();
+    gameStageLabel.style.color = "";
+  }
   const mins = (totalTimeSec / 60).toFixed(1);
   gameTimeLabel.textContent =
     pathHistory.length > 0
@@ -408,7 +680,7 @@ function showGameControls(visible) {
 // ── Evaluation ──────────────────────────────────────────────────────────────
 
 async function evaluateRoute() {
-  if (!levelData || currentStage !== 4) {
+  if (!levelData || !isGameFinished()) {
     alert("Finish your route by clicking the End point first.");
     return;
   }
@@ -418,15 +690,14 @@ async function evaluateRoute() {
   setStatus("Computing optimal route…", "");
 
   try {
-    const response = await fetch(`${API_BASE}/api/solve_parallel`, {
+    const endpoint =
+      currentGameMode === "linear" ? "/api/solve_linear" : "/api/solve_parallel";
+    const body = buildEvaluatePayload();
+
+    const response = await fetch(`${API_BASE}${endpoint}`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        start:  { lat: levelData.start.lat, lon: levelData.start.lon },
-        stage1: levelData.stage1.map((p) => ({ lat: p.lat, lon: p.lon })),
-        stage2: levelData.stage2.map((p) => ({ lat: p.lat, lon: p.lon })),
-        end:    { lat: levelData.end.lat, lon: levelData.end.lon },
-      }),
+      body:    JSON.stringify(body),
     });
 
     const data = await response.json().catch(() => ({}));
@@ -460,9 +731,23 @@ async function evaluateRoute() {
   }
 }
 
-/**
- * @param {Array<[number, number]>} geometry
- */
+function buildEvaluatePayload() {
+  if (isParallelMode()) {
+    return {
+      start:  coordPayload(levelData.start),
+      stage1: levelData.stage1.map((p) => coordPayload(p)),
+      stage2: levelData.stage2.map((p) => coordPayload(p)),
+      end:    coordPayload(levelData.end),
+    };
+  }
+
+  return {
+    start: coordPayload(levelData.start),
+    pois:  levelData.pois.map((p) => coordPayload(p)),
+    end:   coordPayload(levelData.end),
+  };
+}
+
 function drawOptimalRoute(geometry) {
   if (!mapInstance || !Array.isArray(geometry) || geometry.length === 0) {
     return;
@@ -529,15 +814,21 @@ function renderMap(level) {
   addGameMarker(level.start, "start", "START");
   bounds.extend([level.start.lat, level.start.lon]);
 
-  level.stage1.forEach((poi, i) => {
-    addGameMarker(poi, "stage1", `S1-${i + 1}`);
-    bounds.extend([poi.lat, poi.lon]);
-  });
-
-  level.stage2.forEach((poi, i) => {
-    addGameMarker(poi, "stage2", `S2-${i + 1}`);
-    bounds.extend([poi.lat, poi.lon]);
-  });
+  if (isParallelMode()) {
+    level.stage1.forEach((poi, i) => {
+      addGameMarker(poi, "stage1", `S1-${i + 1}`);
+      bounds.extend([poi.lat, poi.lon]);
+    });
+    level.stage2.forEach((poi, i) => {
+      addGameMarker(poi, "stage2", `S2-${i + 1}`);
+      bounds.extend([poi.lat, poi.lon]);
+    });
+  } else {
+    level.pois.forEach((poi, i) => {
+      addGameMarker(poi, "stop", `P${i + 1}`);
+      bounds.extend([poi.lat, poi.lon]);
+    });
+  }
 
   addGameMarker(level.end, "end", "END");
   bounds.extend([level.end.lat, level.end.lon]);
@@ -551,14 +842,10 @@ function renderMap(level) {
   });
 }
 
-/**
- * @param {object} poi
- * @param {"start" | "stage1" | "stage2" | "end"} role
- * @param {string} shortLabel
- */
 function addGameMarker(poi, role, shortLabel) {
+  const visited = role === "stop" && isStopVisited(poi.id);
   const marker = L.marker([poi.lat, poi.lon], {
-    icon: createPinIcon(role, shortLabel),
+    icon: createPinIcon(role, shortLabel, visited),
   });
 
   marker.bindTooltip(escapeHtml(poi.name), {
@@ -568,21 +855,26 @@ function addGameMarker(poi, role, shortLabel) {
   });
 
   if (role !== "start") {
-    marker.on("click", () => handlePoiClick(poi, role));
+    marker.on("click", (e) => {
+      L.DomEvent.stopPropagation(e);
+      const poiData = cleanPoiData(poi);
+      if (isParallelMode()) {
+        handleParallelPoiClick(poiData, role);
+      } else {
+        handleLinearPoiClick(poiData, role);
+      }
+    });
   }
 
   markerLayer.addLayer(marker);
+  poi._marker = marker;
 }
 
-/**
- * @param {"start" | "stage1" | "stage2" | "end"} role
- * @param {string} shortLabel
- * @returns {L.DivIcon}
- */
-function createPinIcon(role, shortLabel) {
+function createPinIcon(role, shortLabel, visited = false) {
   const colorClass = `marker-pin__dot--${role}`;
+  const visitedClass = visited ? " marker-pin--visited" : "";
   return L.divIcon({
-    className: "marker-pin",
+    className: `marker-pin${visitedClass}`,
     html: `
       <div class="marker-pin__dot ${colorClass}"></div>
       <span class="marker-pin__label">${escapeHtml(shortLabel)}</span>
@@ -611,15 +903,89 @@ function hideMap() {
   destroyMap();
 }
 
+function returnToLobby() {
+  hideMap();
+  hideGameplayUi();
+  currentGameMode = null;
+  initLobby();
+}
+
 // ── UI Helpers ─────────────────────────────────────────────────────────────
 
-function clearResults() {
+function clearResultsList() {
   resultsList.innerHTML = "";
+}
+
+function showResultsPanel() {
+  resultsPanel.classList.remove("hidden");
+}
+
+function hideResultsPanel() {
+  resultsPanel.classList.add("hidden");
+}
+
+function clearResults() {
+  clearResultsList();
+  hideResultsPanel();
+}
+
+function renderResults(results) {
+  clearResultsList();
+
+  results.forEach((poi, index) => {
+    const lat = poi.lat ?? poi.latitude;
+    const lon = poi.lon ?? poi.longitude ?? poi.lng;
+
+    if (lat == null || lon == null) {
+      console.warn(`[game.js] Skipping result #${index} — missing coordinates:`, poi);
+      return;
+    }
+
+    const li = document.createElement("li");
+    li.className = "result-item";
+    li.setAttribute("role", "listitem");
+    li.setAttribute("tabindex", "0");
+    li.setAttribute("aria-label", poi.name);
+
+    li.innerHTML = `
+      <span class="result-name">${escapeHtml(poi.name)}</span>
+      <span class="result-coords">${lat.toFixed(5)}, ${lon.toFixed(5)}</span>
+    `;
+
+    li.addEventListener("click", () => loadLevel({ name: poi.name, lat, lon }));
+    li.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        loadLevel({ name: poi.name, lat, lon });
+      }
+    });
+
+    resultsList.appendChild(li);
+  });
+
+  if (results.length > 0) {
+    showResultsPanel();
+  } else {
+    hideResultsPanel();
+  }
 }
 
 function setStatus(message, type) {
   statusMsg.textContent = message;
   statusMsg.className = `status-msg ${type}`.trim();
+}
+
+/** Update HUD during gameplay (search panel may be hidden). */
+function setPlayStatus(message, type) {
+  setStatus(message, type);
+  gameStageLabel.textContent = message;
+  if (type === "error") {
+    gameStageLabel.style.color = "var(--error)";
+  } else if (type === "success") {
+    gameStageLabel.style.color = "var(--success)";
+  } else {
+    gameStageLabel.style.color = "";
+  }
 }
 
 function setLoading(loading) {
@@ -638,14 +1004,26 @@ function escapeHtml(str) {
 
 // ── Event Listeners ────────────────────────────────────────────────────────
 
-searchBtn.addEventListener("click", performSearch);
+btnParallelMode.addEventListener("click", () => selectGameMode("parallel"));
+btnLinearMode.addEventListener("click", () => selectGameMode("linear"));
+btnPractice.addEventListener("click", showPracticeSearch);
+btnRandom.addEventListener("click", startRandomMode);
+btnBackMenu.addEventListener("click", () => {
+  currentGameMode = null;
+  hideGameplayUi();
+  showLobby();
+  headerSubtitle.textContent = "Choose a game mode to begin";
+});
 
+searchBtn.addEventListener("click", performSearch);
 searchInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") performSearch();
 });
 
 undoBtn.addEventListener("click", undoLastStep);
 evaluateBtn.addEventListener("click", evaluateRoute);
+
+initLobby();
 
 function getSelectedLocation() {
   return levelData ? levelData.start : null;

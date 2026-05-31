@@ -6,7 +6,9 @@ ARCHITECTURAL RULE (see CLAUDE.md §3):
   OSRM matrices are fetched in app.py via api_osrm, then passed here.
 """
 
+import itertools
 import math
+import random
 
 # Parallel route matrix layout (8 nodes): start + 3 stage1 + 3 stage2 + end
 _IDX_START = 0
@@ -65,6 +67,62 @@ def synthetic_end_point(
 def _to_lon_lat(coord: dict) -> tuple[float, float]:
     """Normalise {lat, lon} dict to OSRM (lon, lat) tuple."""
     return (float(coord["lon"]), float(coord["lat"]))
+
+
+def _degree_distance(a: dict, b: dict) -> float:
+    """Approximate distance between two points in decimal degrees."""
+    dlat = float(a["lat"]) - float(b["lat"])
+    dlon = float(a["lon"]) - float(b["lon"])
+    return math.sqrt(dlat * dlat + dlon * dlon)
+
+
+def _too_close(candidate: dict, others: list[dict], min_distance_deg: float) -> bool:
+    """True if candidate is within min_distance_deg of any point in others."""
+    for other in others:
+        if _degree_distance(candidate, other) < min_distance_deg:
+            return True
+    return False
+
+
+def apply_coordinate_jitter(
+    points: list[dict],
+    min_distance_deg: float = 0.0002,
+    max_attempts: int = 50,
+) -> list[dict]:
+    """
+    Separate overlapping POIs by nudging lat/lon when collisions occur.
+
+    The first point (Start) is never moved. All following points are checked
+    against every already-placed point; on collision, a small random offset is
+    applied until the minimum spacing is met or max_attempts is reached.
+
+    Returns a new list of dicts with updated lat/lon (other fields preserved).
+    """
+    if not points:
+        return []
+
+    processed: list[dict] = []
+
+    for index, point in enumerate(points):
+        jittered = dict(point)
+        jittered["lat"] = float(point["lat"])
+        jittered["lon"] = float(point["lon"])
+
+        if index == 0:
+            processed.append(jittered)
+            continue
+
+        attempts = 0
+        while _too_close(jittered, processed, min_distance_deg) and attempts < max_attempts:
+            jittered["lat"] = float(jittered["lat"]) + random.uniform(-0.0003, 0.0003)
+            jittered["lon"] = float(jittered["lon"]) + random.uniform(-0.0003, 0.0003)
+            jittered["lat"] = round(jittered["lat"], 6)
+            jittered["lon"] = round(jittered["lon"], 6)
+            attempts += 1
+
+        processed.append(jittered)
+
+    return processed
 
 
 def build_parallel_coord_order(
@@ -165,6 +223,87 @@ def calculate_best_parallel_route(
         "path_indices":       [_IDX_START, best_s1, best_s2, _IDX_END],
         "stage1_poi_index":   best_s1 - _IDX_STAGE1[0],
         "stage2_poi_index":   best_s2 - _IDX_STAGE2[0],
+        "total_duration_sec": best_total,
+        "waypoints":          waypoints,
+    }
+
+
+# Linear TSP matrix layout (7 nodes): start + 5 middle + end
+_LINEAR_IDX_START = 0
+_LINEAR_IDX_MIDDLE = (1, 2, 3, 4, 5)
+_LINEAR_IDX_END = 6
+
+
+def build_linear_coord_order(
+    start_coord: dict,
+    pois: list[dict],
+    end_coord: dict,
+) -> list[tuple[float, float]]:
+    """Build OSRM coordinate list: [start] + 5 middle POIs + [end]."""
+    ordered = [_to_lon_lat(start_coord)]
+    for poi in pois[:5]:
+        ordered.append(_to_lon_lat(poi))
+    ordered.append(_to_lon_lat(end_coord))
+    return ordered
+
+
+def calculate_best_linear_route(
+    start_coord: dict,
+    pois: list[dict],
+    duration_matrix: list[list],
+    end_coord: dict,
+) -> dict | None:
+    """
+    Solve linear TSP: start -> permutation(5 stops) -> end (5! = 120 paths).
+
+    Returns:
+        {
+            "path_indices": [0, ..., 6],      # matrix indices in visit order
+            "poi_order": [int, ...],          # permutation of pois[0..4]
+            "total_duration_sec": float,
+            "waypoints": [(lon, lat), ...],
+        }
+        or None if inputs/matrix are invalid.
+    """
+    if len(pois) < 5 or not end_coord:
+        return None
+
+    coord_order = build_linear_coord_order(start_coord, pois, end_coord)
+
+    if not duration_matrix or len(duration_matrix) < len(coord_order):
+        return None
+
+    best_total = None
+    best_path = None
+
+    for perm in itertools.permutations(_LINEAR_IDX_MIDDLE):
+        path = [_LINEAR_IDX_START, *perm, _LINEAR_IDX_END]
+        total = 0.0
+        valid = True
+
+        for i in range(len(path) - 1):
+            leg = _matrix_duration(duration_matrix, path[i], path[i + 1])
+            if leg is None:
+                valid = False
+                break
+            total += leg
+
+        if not valid:
+            continue
+
+        if best_total is None or total < best_total:
+            best_total = total
+            best_path = path
+
+    if best_path is None or best_total is None:
+        return None
+
+    poi_order = [idx - _LINEAR_IDX_MIDDLE[0] for idx in best_path[1:-1]]
+    waypoints = [coord_order[idx] for idx in best_path]
+
+    return {
+        "path_indices":       best_path,
+        "poi_order":          poi_order,
         "total_duration_sec": best_total,
         "waypoints":          waypoints,
     }
