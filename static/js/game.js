@@ -56,23 +56,23 @@ const toastStack      = document.getElementById("toast-stack");
 
 const RANDOM_CITIES = [
   "Taipei",
-  "Tokyo",
+  "Shinjuku, Tokyo",      // 指定新宿區，避開大公園與海灣
   "Seoul",
-  "Singapore",
+  "Downtown Core, Singapore", // 指定新加坡市中心，完美避開蓄水池
   "Hong Kong",
   "Bangkok",
   "Sydney",
   "London",
   "Paris",
   "Berlin",
-  "New York",
+  "Manhattan, New York",  // 指定曼哈頓，完美的棋盤格街道
   "Los Angeles",
   "Chicago",
   "Toronto",
   "São Paulo",
   "Mexico City",
   "Dubai",
-  "Istanbul",
+  "Nagoya",               // 替換掉伊斯坦堡，擁有極佳的都市路網
 ];
 
 const START_OFFSET_DEG = 0.004;
