@@ -51,6 +51,7 @@ const gameOverMessage = document.getElementById("game-over-message");
 const restartGameBtn  = document.getElementById("restart-game-btn");
 const btnSearchBack   = document.getElementById("btn-search-back");
 const toastStack      = document.getElementById("toast-stack");
+const btnFoliumReport = document.getElementById("btn-folium-report");
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -1420,7 +1421,65 @@ function showToast(message, type = "warning", durationMs = 4200) {
   timer = setTimeout(dismiss, durationMs);
 }
 
+function formatPoiForFoliumPts(poi, role) {
+  const lat = poi?.lat ?? poi?.latitude;
+  const lon = poi?.lon ?? poi?.longitude ?? poi?.lng;
+  if (lat == null || lon == null) {
+    return null;
+  }
+  const resolvedRole = role || poi?.role || "stop";
+  return `${Number(lat)},${Number(lon)},${resolvedRole}`;
+}
+
+/** Build lat,lon,role|lat,lon,role|... for the current mission intel map. */
+function buildFoliumPtsString() {
+  const segments = [];
+
+  const pushPoi = (poi, role) => {
+    const segment = formatPoiForFoliumPts(poi, role);
+    if (segment) {
+      segments.push(segment);
+    }
+  };
+
+  pushPoi(levelData.start, "start");
+
+  if (Array.isArray(levelData.stage1)) {
+    levelData.stage1.forEach((poi) => pushPoi(poi, "stage1"));
+  }
+  if (Array.isArray(levelData.stage2)) {
+    levelData.stage2.forEach((poi) => pushPoi(poi, "stage2"));
+  }
+  if (Array.isArray(levelData.pois)) {
+    levelData.pois.forEach((poi) => pushPoi(poi, "stop"));
+  }
+
+  pushPoi(levelData.end, "end");
+
+  return segments.join("|");
+}
+
+function openFoliumReport() {
+  if (!levelData) {
+    showToast("Start a mission first to view Satellite Intel.", "warning");
+    return;
+  }
+
+  const ptsString = buildFoliumPtsString();
+  if (!ptsString) {
+    showToast("No mission coordinates available for Satellite Intel.", "warning");
+    return;
+  }
+
+  const modal = document.getElementById("folium-modal");
+  document.getElementById("folium-iframe").src =
+    `${API_BASE}/api/folium_report?pts=${encodeURIComponent(ptsString)}`;
+  modal.showModal();
+}
+
 // ── Event Listeners ────────────────────────────────────────────────────────
+
+btnFoliumReport.addEventListener("click", openFoliumReport);
 
 btnParallelMode.addEventListener("click", () => selectGameMode("parallel"));
 btnLinearMode.addEventListener("click", () => selectGameMode("linear"));

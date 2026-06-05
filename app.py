@@ -8,6 +8,7 @@ ARCHITECTURAL RULE (see CLAUDE.md §3):
   function, and returns its result as JSON.
 """
 
+import folium
 from flask import Flask, jsonify, render_template, request
 
 from api_nominatim import search_locations
@@ -333,6 +334,105 @@ def api_solve_linear():
         "matrix_duration_sec":   best["total_duration_sec"],
         "optimal_duration_min":  round(best["total_duration_sec"] / 60.0, 1),
     })
+
+
+_FOLIUM_ROLE_COLORS = {
+    "start":   "#10b981",
+    "stage1":  "#f97316",
+    "stage2":  "#a855f7",
+    "stop":    "#3b82f6",
+    "end":     "#ef4444",
+    "unknown": "#6b7280",
+}
+_FOLIUM_DEFAULT_COLOR = "#6b7280"
+_FOLIUM_DEFAULT_POINT = (25.0339, 121.5644, "start")
+
+
+def _parse_folium_pts(pts_str: str) -> list[tuple[float, float, str]]:
+    """
+    Parse pts query string into (lat, lon, role) tuples.
+
+    Accepts per-segment formats:
+      - lat,lon           → role defaults to "unknown"
+      - lat,lon,role      → explicit role
+    """
+    points: list[tuple[float, float, str]] = []
+    if not pts_str or not pts_str.strip():
+        return points
+
+    for segment in pts_str.split("|"):
+        segment = segment.strip()
+        if not segment:
+            continue
+
+        parts = [p.strip() for p in segment.split(",") if p.strip()]
+        if len(parts) < 2:
+            continue
+
+        try:
+            lat = float(parts[0])
+            lon = float(parts[1])
+        except ValueError:
+            continue
+
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            continue
+
+        if len(parts) == 2:
+            role = "unknown"
+        else:
+            role = parts[2] or "unknown"
+
+        points.append((lat, lon, role))
+
+    return points
+
+
+@app.route("/api/folium_report")
+def folium_report():
+    """
+    GET /api/folium_report?pts=lat,lon,role|lat,lon|...
+
+    Strategic intel overview — all mission nodes for static planning.
+    Standalone Folium map; does not affect the Leaflet.js game loop.
+    """
+    points = _parse_folium_pts(request.args.get("pts", ""))
+    if not points:
+        points = [_FOLIUM_DEFAULT_POINT]
+
+    center_lat = sum(p[0] for p in points) / len(points)
+    center_lon = sum(p[1] for p in points) / len(points)
+
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=15,
+    )
+
+    line_coords: list[list[float]] = []
+
+    for lat, lon, role in points:
+        color = _FOLIUM_ROLE_COLORS.get(role, _FOLIUM_DEFAULT_COLOR)
+        radius = 10 if role in ("start", "end") else 7
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=radius,
+            color=color,
+            fill=True,
+            fill_color=color,
+            fill_opacity=0.7,
+        ).add_to(m)
+        line_coords.append([lat, lon])
+
+    if len(line_coords) >= 2:
+        folium.PolyLine(
+            locations=line_coords,
+            color="gray",
+            weight=1,
+            opacity=0.4,
+            dash_array="5, 10",
+        ).add_to(m)
+
+    return m.get_root().render()
 
 
 # ── Entry Point ───────────────────────────────────────────────────────────────

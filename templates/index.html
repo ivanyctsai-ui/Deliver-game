@@ -158,7 +158,18 @@
 
   </div>
 
+  <button id="btn-folium-report" class="btn" style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; font-size: 0.8rem; opacity: 0.7; transition: opacity 0.3s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">Folium Radar</button>
+
   <div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
+
+  <style>#folium-modal::backdrop { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px); }</style>
+  <dialog id="folium-modal" style="width: 85vw; height: 85vh; margin: auto; border: 2px solid #ec4899; background: #0f172a; padding: 0; border-radius: 8px; overflow: hidden; box-shadow: 0 0 30px rgba(0,0,0,0.9);">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: #1e293b; color: white; font-family: monospace;">
+      <span>Folium Strategic Radar (Embedded)</span>
+      <button onclick="document.getElementById('folium-modal').close()" style="cursor:pointer; background:var(--error); border:none; color:white; padding: 5px 10px; border-radius: 4px;">Close</button>
+    </div>
+    <iframe id="folium-iframe" src="" style="display: block; width: 100%; height: calc(100% - 40px); border: none;"></iframe>
+  </dialog>
 
   <script>
     const API_BASE = "";
